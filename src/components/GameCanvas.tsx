@@ -557,7 +557,11 @@ export const GameCanvas = () => {
 
       // Ship controls
       const speed = 0.3;
-      const joystickSpeed = 0.8; // Higher speed for joystick for snappier controls
+      // Different joystick speeds for mobile vs desktop
+      // Mobile: Higher multiplier (1.2) so small thumb movements create significant ship movement
+      // Desktop: Lower multiplier (0.8) for precise control with mouse/trackpad
+      const joystickSpeed = isMobile ? 1.2 : 0.8;
+      const joystickThreshold = isMobile ? 0.03 : 0.05; // Lower threshold for mobile
       let isAccelerating = false;
       
       // Keyboard controls
@@ -566,10 +570,10 @@ export const GameCanvas = () => {
       if (game.keys["a"] || game.keys["arrowleft"]) { game.ship.vx -= speed; isAccelerating = true; }
       if (game.keys["d"] || game.keys["arrowright"]) { game.ship.vx += speed; isAccelerating = true; }
       
-      // Joystick controls - more responsive with higher speed and lower threshold
+      // Joystick controls - mobile-optimized sensitivity
       const currentJoystick = joystickInputRef.current;
-      if (Math.abs(currentJoystick.x) > 0.05 || Math.abs(currentJoystick.y) > 0.05) {
-        // Apply joystick input with higher speed multiplier for snappy response
+      if (Math.abs(currentJoystick.x) > joystickThreshold || Math.abs(currentJoystick.y) > joystickThreshold) {
+        // Apply joystick input with device-specific speed multiplier
         game.ship.vx += currentJoystick.x * joystickSpeed;
         game.ship.vy += currentJoystick.y * joystickSpeed;
         isAccelerating = true;
