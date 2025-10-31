@@ -100,25 +100,29 @@ export const GameCanvas = () => {
   const [hasUpgraded, setHasUpgraded] = useState(false); // Track if ship has been upgraded to ship2
   const [hasUpgradedToShip3, setHasUpgradedToShip3] = useState(false); // Track if ship has been upgraded to ship3
   
-  // Mobile touch event prevention
+  // Mobile touch event prevention - only on canvas during gameplay
   useEffect(() => {
-    if (!isMobile) return;
+    if (!isMobile || !canvasRef.current) return;
 
+    const canvas = canvasRef.current;
     const preventTouch = (e: TouchEvent) => {
-      e.preventDefault();
+      // Only prevent touch events during gameplay to avoid interfering with UI
+      if (gameState === "playing") {
+        e.preventDefault();
+      }
     };
 
-    // Add non-passive event listeners to prevent scrolling/zooming
-    document.addEventListener('touchstart', preventTouch, { passive: false });
-    document.addEventListener('touchmove', preventTouch, { passive: false });
-    document.addEventListener('touchend', preventTouch, { passive: false });
+    // Add non-passive event listeners to prevent scrolling/zooming on canvas only
+    canvas.addEventListener('touchstart', preventTouch, { passive: false });
+    canvas.addEventListener('touchmove', preventTouch, { passive: false });
+    canvas.addEventListener('touchend', preventTouch, { passive: false });
 
     return () => {
-      document.removeEventListener('touchstart', preventTouch);
-      document.removeEventListener('touchmove', preventTouch);
-      document.removeEventListener('touchend', preventTouch);
+      canvas.removeEventListener('touchstart', preventTouch);
+      canvas.removeEventListener('touchmove', preventTouch);
+      canvas.removeEventListener('touchend', preventTouch);
     };
-  }, [isMobile]);
+  }, [isMobile, gameState]);
    
    // Mobile controls state
    const [joystickInput, setJoystickInput] = useState({ x: 0, y: 0 });
