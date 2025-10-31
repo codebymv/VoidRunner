@@ -163,6 +163,13 @@ export class AudioManager {
     }
     
     try {
+      // Special handling for game over sound - make it louder
+      if (soundName === 'gameOver') {
+        audio.volume = 1.5; // 50% louder than other sounds
+      } else {
+        audio.volume = 1.0; // Normal volume for other sounds
+      }
+      
       // Reset audio to beginning and play
       audio.currentTime = 0;
       audio.play().catch(error => {
