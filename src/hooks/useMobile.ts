@@ -11,11 +11,32 @@ export const useMobile = () => {
       const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
       const isSmallScreen = window.innerWidth <= 768;
       
+      // Check for desktop simulation modes
+      const urlParams = new URLSearchParams(window.location.search);
+      const forceMobile = urlParams.get('mobile') === 'true' || urlParams.get('simulate') === 'mobile';
+      
+      // Check if browser dev tools are simulating mobile (common viewport sizes)
+      const isDevToolsMobile = (
+        window.innerWidth === 375 && window.innerHeight === 667 || // iPhone 6/7/8
+        window.innerWidth === 414 && window.innerHeight === 896 || // iPhone XR
+        window.innerWidth === 390 && window.innerHeight === 844 || // iPhone 12
+        window.innerWidth === 360 && window.innerHeight === 640 || // Galaxy S5
+        window.innerWidth === 412 && window.innerHeight === 915    // Pixel 7
+      );
+      
       // Enable mobile mode if:
       // 1. It's a mobile device (user agent)
       // 2. It has touch capabilities AND small screen
-      // 3. OR just small screen (for desktop testing at mobile widths)
-      setIsMobile(isMobileDevice || (isTouchDevice && isSmallScreen) || isSmallScreen);
+      // 3. Small screen (for desktop testing at mobile widths)
+      // 4. Force mobile via URL parameter (?mobile=true or ?simulate=mobile)
+      // 5. Common mobile viewport sizes (dev tools simulation)
+      setIsMobile(
+        isMobileDevice || 
+        (isTouchDevice && isSmallScreen) || 
+        isSmallScreen || 
+        forceMobile || 
+        isDevToolsMobile
+      );
       setIsLandscape(window.innerWidth > window.innerHeight);
     };
 

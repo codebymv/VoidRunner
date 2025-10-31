@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "./ui/button";
 import { toast } from "sonner";
 import { StarField } from "@/utils/StarField";
@@ -99,6 +99,7 @@ export const GameCanvas = () => {
   const [shield, setShield] = useState(0.0); // Overshield that absorbs damage first (max 3.0)
   const [hasUpgraded, setHasUpgraded] = useState(false); // Track if ship has been upgraded to ship2
   const [hasUpgradedToShip3, setHasUpgradedToShip3] = useState(false); // Track if ship has been upgraded to ship3
+  const [showHelp, setShowHelp] = useState(false); // State for help popup
   
   // Mobile touch event prevention - only on canvas during gameplay
   useEffect(() => {
@@ -126,6 +127,24 @@ export const GameCanvas = () => {
    
    // Mobile controls state
    const [joystickInput, setJoystickInput] = useState({ x: 0, y: 0 });
+   const joystickInputRef = useRef({ x: 0, y: 0 }); // Ref to hold current joystick input
+   const [showJoystick, setShowJoystick] = useState(false); // Toggle for desktop joystick testing
+
+   // Debug wrapper for setJoystickInput with useCallback for stable reference
+   const handleJoystickInput = useCallback((input: { x: number; y: number }) => {
+     console.log('🔄 GameCanvas received joystick input:', JSON.stringify(input));
+     
+     // Update both ref and state
+     joystickInputRef.current = input;
+     setJoystickInput(input);
+     
+     console.log('🔄 Updated joystickInputRef.current to:', JSON.stringify(joystickInputRef.current));
+   }, []);
+
+   // Log when joystickInput state actually changes
+   useEffect(() => {
+     console.log('🔄 joystickInput state CHANGED to:', JSON.stringify(joystickInput));
+   }, [joystickInput]);
   
   // Helper function to get star acquisition amount based on ship level
   const getStarValue = (currentScore: number) => {
@@ -280,8 +299,8 @@ export const GameCanvas = () => {
     // Make canvas responsive - smaller on mobile to leave room for UI and joystick
     canvas.width = window.innerWidth * 0.9;
     if (isMobile) {
-      // On mobile, reduce height significantly to make room for joystick and UI
-      canvas.height = window.innerHeight * 0.70; // Increased from 0.65 to 0.70 for slightly more gameplay area
+      // On mobile, use slightly smaller canvas to create space between game area and joystick
+      canvas.height = window.innerHeight * 0.70;
     } else {
       canvas.height = window.innerHeight * 0.9;
     }
@@ -298,7 +317,7 @@ export const GameCanvas = () => {
     const handleResize = () => {
       canvas.width = window.innerWidth * 0.9;
       if (isMobile) {
-        // On mobile, reduce height significantly to make room for joystick and UI
+        // On mobile, use slightly smaller canvas to create space between game area and joystick
         canvas.height = window.innerHeight * 0.70;
       } else {
         canvas.height = window.innerHeight * 0.9;
@@ -315,6 +334,12 @@ export const GameCanvas = () => {
       if (e.key === "Escape" && gameState === "playing") {
         e.preventDefault();
         setGameState("paused");
+      }
+      // Toggle joystick visibility for desktop testing (J key)
+      if (e.key.toLowerCase() === "j" && !isMobile) {
+        e.preventDefault();
+        setShowJoystick(prev => !prev);
+        toast(showJoystick ? "Joystick hidden" : "Joystick visible - Test mobile controls!");
       }
     };
 
@@ -532,6 +557,7 @@ export const GameCanvas = () => {
 
       // Ship controls
       const speed = 0.3;
+      const joystickSpeed = 0.8; // Higher speed for joystick for snappier controls
       let isAccelerating = false;
       
       // Keyboard controls
@@ -540,10 +566,12 @@ export const GameCanvas = () => {
       if (game.keys["a"] || game.keys["arrowleft"]) { game.ship.vx -= speed; isAccelerating = true; }
       if (game.keys["d"] || game.keys["arrowright"]) { game.ship.vx += speed; isAccelerating = true; }
       
-      // Mobile joystick controls
-      if (isMobile && (Math.abs(joystickInput.x) > 0.1 || Math.abs(joystickInput.y) > 0.1)) {
-        game.ship.vx += joystickInput.x * speed;
-        game.ship.vy += joystickInput.y * speed;
+      // Joystick controls - more responsive with higher speed and lower threshold
+      const currentJoystick = joystickInputRef.current;
+      if (Math.abs(currentJoystick.x) > 0.05 || Math.abs(currentJoystick.y) > 0.05) {
+        // Apply joystick input with higher speed multiplier for snappy response
+        game.ship.vx += currentJoystick.x * joystickSpeed;
+        game.ship.vy += currentJoystick.y * joystickSpeed;
         isAccelerating = true;
       }
 
@@ -1504,20 +1532,29 @@ export const GameCanvas = () => {
       }}
     >
       {/* Game Area Container */}
-      <div className={`flex flex-col items-center w-full h-full p-1 sm:p-2 md:p-4 ${isMobile ? 'justify-start pt-2' : 'justify-center'}`}>
+      <div className={`flex flex-col items-center w-full h-full p-1 sm:p-2 md:p-4 ${isMobile ? 'justify-start pb-[15vh]' : 'justify-center'}`}>
         {/* UI Header - Responsive Layout */}
         {gameState === "playing" && (
           <div className="w-full max-w-4xl mb-1 sm:mb-2 md:mb-4">
             {isMobile ? (
               /* Mobile Layout - Stacked */
               <div className="space-y-2 sm:space-y-3">
-                {/* Top Row - Logo and Score */}
+                {/* Top Row - Logo, Help, and Score */}
                 <div className="flex items-center justify-between px-1 sm:px-2">
                   <img 
                     src={logoImage} 
                     alt="Game Logo" 
                     className="h-6 sm:h-8 w-auto object-contain" 
                   />
+                  
+                  {/* Help Icon */}
+                  <button
+                    onClick={() => setShowHelp(!showHelp)}
+                    className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 text-primary hover:bg-primary/30 transition-colors flex items-center justify-center text-lg font-bold z-[70]"
+                  >
+                    ?
+                  </button>
+                  
                   <div className="text-xl sm:text-2xl md:text-3xl font-bold text-primary glow-cyan">{score}</div>
                 </div>
                 
@@ -1642,9 +1679,10 @@ export const GameCanvas = () => {
           <canvas ref={canvasRef} className="block" />
         </div>
         
-        {/* UI Footer - Additional info could go here */}
-        {gameState === "playing" && (
-          <div className={`mt-2 sm:mt-4 text-xs sm:text-sm text-muted-foreground text-center px-2 ${isMobile ? 'mb-20' : ''}`}>
+        {/* Help Popup Bubble - positioned relative to help icon */}
+        {gameState === "playing" && showHelp && (
+          <div className="fixed top-16 left-1/2 transform -translate-x-1/2 bg-card/95 backdrop-blur-xl border border-primary/30 rounded-lg p-3 text-xs text-muted-foreground whitespace-nowrap shadow-lg z-[80]">
+            <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-card/95"></div>
             {isMobile ? (
               <p>Use joystick to move • Tap pause button to pause</p>
             ) : (
@@ -1717,12 +1755,17 @@ export const GameCanvas = () => {
         </div>
       )}
       
-      {/* Mobile Virtual Joystick */}
-      {isMobile && gameState === "playing" && (
-        <VirtualJoystick
-          onMove={setJoystickInput}
-          className="fixed bottom-20 left-2 z-10 sm:bottom-24 sm:left-4 md:bottom-28 md:left-6"
-        />
+      {/* Virtual Joystick - Always visible when game is playing */}
+      <VirtualJoystick
+        onMove={handleJoystickInput}
+        isVisible={gameState === "playing"}
+      />
+      
+      {/* Desktop Joystick Toggle Hint */}
+      {!isMobile && gameState === "playing" && !showJoystick && (
+        <div className="fixed bottom-4 right-4 z-10 bg-black/70 text-white px-3 py-2 rounded-lg text-sm backdrop-blur-sm border border-cyan-500/30">
+          Press <kbd className="bg-cyan-500/20 px-2 py-1 rounded text-cyan-300 font-mono">J</kbd> to toggle joystick
+        </div>
       )}
     </div>
   );

@@ -1,226 +1,47 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
-
-interface JoystickData {
-  x: number; // -1 to 1
-  y: number; // -1 to 1
-  distance: number; // 0 to 1
-  angle: number; // 0 to 2π
-}
+import React from 'react';
+import { Joystick } from 'react-joystick-component';
 
 interface VirtualJoystickProps {
-  onMove: (data: JoystickData) => void;
-  onStart?: () => void;
-  onEnd?: () => void;
-  size?: number;
-  knobSize?: number;
-  className?: string;
+  onMove: (input: { x: number; y: number }) => void;
+  isVisible: boolean;
 }
 
-export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
-  onMove,
-  onStart,
-  onEnd,
-  size,
-  knobSize,
-  className = ''
-}) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [knobPosition, setKnobPosition] = useState({ x: 0, y: 0 });
-  const [centerPosition, setCenterPosition] = useState({ x: 0, y: 0 });
+export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove, isVisible }) => {
+  console.log('🎯 VirtualJoystick render - isVisible:', isVisible);
+  if (!isVisible) {
+    console.log('❌ VirtualJoystick not visible, returning null');
+    return null;
+  }
+  console.log('✅ VirtualJoystick is visible, rendering component');
 
-  // Responsive sizing based on screen width
-  const getResponsiveSize = () => {
-    if (size !== undefined) return size;
-    return window.innerWidth <= 375 ? 80 : window.innerWidth <= 480 ? 100 : 120;
+  const handleMove = (event: any) => {
+    // Convert the joystick output to our expected format
+    // The library provides x and y values between -1 and 1
+    console.log('🕹️ Joystick raw event - x:', event.x, 'y:', event.y, 'distance:', event.distance);
+    const input = {
+      x: event.x || 0,
+      y: -(event.y || 0) // Invert Y axis to match game expectations (up = negative)
+    };
+    console.log('🎮 Sending processed input - x:', input.x, 'y:', input.y);
+    onMove(input);
   };
 
-  const getResponsiveKnobSize = () => {
-    if (knobSize !== undefined) return knobSize;
-    return window.innerWidth <= 375 ? 25 : window.innerWidth <= 480 ? 32 : 40;
+  const handleStop = () => {
+    // When joystick is released, return to center (0, 0)
+    onMove({ x: 0, y: 0 });
   };
-
-  const [responsiveSize, setResponsiveSize] = useState(getResponsiveSize());
-  const [responsiveKnobSize, setResponsiveKnobSize] = useState(getResponsiveKnobSize());
-
-  const maxDistance = (responsiveSize - responsiveKnobSize) / 2;
-
-  const updateCenterPosition = useCallback(() => {
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      setCenterPosition({
-        x: rect.left + rect.width / 2,
-        y: rect.top + rect.height / 2
-      });
-    }
-  }, []);
-
-  const updateResponsiveSizes = useCallback(() => {
-    setResponsiveSize(getResponsiveSize());
-    setResponsiveKnobSize(getResponsiveKnobSize());
-  }, [size, knobSize]);
-
-  useEffect(() => {
-    updateCenterPosition();
-    updateResponsiveSizes();
-    
-    const handleResize = () => {
-      updateCenterPosition();
-      updateResponsiveSizes();
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [updateCenterPosition, updateResponsiveSizes]);
-
-  const calculateJoystickData = useCallback((x: number, y: number): JoystickData => {
-    const distance = Math.min(Math.sqrt(x * x + y * y), maxDistance);
-    const angle = Math.atan2(y, x);
-    
-    return {
-      x: distance > 0 ? (x / maxDistance) : 0,
-      y: distance > 0 ? (y / maxDistance) : 0,
-      distance: distance / maxDistance,
-      angle: angle
-    };
-  }, [maxDistance]);
-
-  const handleMove = useCallback((clientX: number, clientY: number) => {
-    if (!isDragging) return;
-
-    const deltaX = clientX - centerPosition.x;
-    const deltaY = clientY - centerPosition.y;
-    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-
-    let newX = deltaX;
-    let newY = deltaY;
-
-    if (distance > maxDistance) {
-      const angle = Math.atan2(deltaY, deltaX);
-      newX = Math.cos(angle) * maxDistance;
-      newY = Math.sin(angle) * maxDistance;
-    }
-
-    setKnobPosition({ x: newX, y: newY });
-    onMove(calculateJoystickData(newX, newY));
-  }, [isDragging, centerPosition, maxDistance, onMove, calculateJoystickData]);
-
-  const handleStart = useCallback((clientX: number, clientY: number) => {
-    setIsDragging(true);
-    updateCenterPosition();
-    onStart?.();
-    handleMove(clientX, clientY);
-  }, [handleMove, onStart, updateCenterPosition]);
-
-  const handleEnd = useCallback(() => {
-    setIsDragging(false);
-    setKnobPosition({ x: 0, y: 0 });
-    onMove({ x: 0, y: 0, distance: 0, angle: 0 });
-    onEnd?.();
-  }, [onMove, onEnd]);
-
-  // Touch events - use manual event listeners to avoid passive warnings
-  const handleTouchStart = useCallback((e: TouchEvent) => {
-    e.preventDefault();
-    const touch = e.touches[0];
-    handleStart(touch.clientX, touch.clientY);
-  }, [handleStart]);
-
-  const handleTouchMove = useCallback((e: TouchEvent) => {
-    e.preventDefault();
-    if (isDragging && e.touches[0]) {
-      const touch = e.touches[0];
-      handleMove(touch.clientX, touch.clientY);
-    }
-  }, [isDragging, handleMove]);
-
-  const handleTouchEnd = useCallback((e: TouchEvent) => {
-    e.preventDefault();
-    handleEnd();
-  }, [handleEnd]);
-
-  // Mouse events (for desktop testing)
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    handleStart(e.clientX, e.clientY);
-  }, [handleStart]);
-
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    handleMove(e.clientX, e.clientY);
-  }, [handleMove]);
-
-  const handleMouseUp = useCallback(() => {
-    handleEnd();
-  }, [handleEnd]);
-
-  useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging, handleMouseMove, handleMouseUp]);
-
-  // Register touch events manually with passive: false to avoid warnings
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    container.addEventListener('touchstart', handleTouchStart, { passive: false });
-    container.addEventListener('touchmove', handleTouchMove, { passive: false });
-    container.addEventListener('touchend', handleTouchEnd, { passive: false });
-
-    return () => {
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
-      container.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
 
   return (
-    <div
-      ref={containerRef}
-      className={`relative select-none touch-none ${className}`}
-      style={{
-        width: responsiveSize,
-        height: responsiveSize,
-      }}
-      onMouseDown={handleMouseDown}
-    >
-      {/* Joystick Base */}
-      <div
-        className="absolute inset-0 rounded-full border-2 border-white/30 bg-black/20 backdrop-blur-sm"
-        style={{
-          width: responsiveSize,
-          height: responsiveSize,
-        }}
-      />
-      
-      {/* Joystick Knob */}
-      <div
-        className={`absolute rounded-full border-2 transition-all duration-75 ${
-          isDragging 
-            ? 'border-blue-400 bg-blue-500/80 shadow-lg shadow-blue-500/50' 
-            : 'border-white/50 bg-white/30'
-        }`}
-        style={{
-          width: responsiveKnobSize,
-          height: responsiveKnobSize,
-          left: responsiveSize / 2 - responsiveKnobSize / 2 + knobPosition.x,
-          top: responsiveSize / 2 - responsiveKnobSize / 2 + knobPosition.y,
-        }}
-      />
-      
-      {/* Center Dot */}
-      <div
-        className="absolute w-2 h-2 bg-white/60 rounded-full"
-        style={{
-          left: responsiveSize / 2 - 4,
-          top: responsiveSize / 2 - 4,
-        }}
+    <div className="fixed bottom-8 left-8 z-50">
+      <Joystick
+        size={120}
+        stickSize={50}
+        baseColor="rgba(59, 130, 246, 0.3)"
+        stickColor="rgba(59, 130, 246, 0.8)"
+        throttle={16} // ~60fps
+        move={handleMove}
+        stop={handleStop}
+        start={() => {}} // Optional start callback
       />
     </div>
   );

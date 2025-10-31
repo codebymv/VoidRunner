@@ -4,7 +4,15 @@
   "version": "1.0.0",
   "description": "Void Runner - A gravity-based arcade space game where you run through gravitational chaos",
   "author": "Void Runner Game",
-  "keywords": ["game", "arcade", "space", "gravity", "physics", "void", "runner"],
+  "keywords": [
+    "game",
+    "arcade",
+    "space",
+    "gravity",
+    "physics",
+    "void",
+    "runner"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -56,6 +64,7 @@
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.61.1",
+    "react-joystick-component": "^6.2.1",
     "react-resizable-panels": "^2.1.9",
     "react-router-dom": "^6.30.1",
     "recharts": "^2.15.4",
