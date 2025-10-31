@@ -119,14 +119,14 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
     onEnd?.();
   }, [onMove, onEnd]);
 
-  // Touch events
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+  // Touch events - use manual event listeners to avoid passive warnings
+  const handleTouchStart = useCallback((e: TouchEvent) => {
     e.preventDefault();
     const touch = e.touches[0];
     handleStart(touch.clientX, touch.clientY);
   }, [handleStart]);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+  const handleTouchMove = useCallback((e: TouchEvent) => {
     e.preventDefault();
     if (isDragging && e.touches[0]) {
       const touch = e.touches[0];
@@ -134,7 +134,7 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
     }
   }, [isDragging, handleMove]);
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+  const handleTouchEnd = useCallback((e: TouchEvent) => {
     e.preventDefault();
     handleEnd();
   }, [handleEnd]);
@@ -164,6 +164,22 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
     }
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
+  // Register touch events manually with passive: false to avoid warnings
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd, { passive: false });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
+
   return (
     <div
       ref={containerRef}
@@ -172,9 +188,6 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
         width: responsiveSize,
         height: responsiveSize,
       }}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
       onMouseDown={handleMouseDown}
     >
       {/* Joystick Base */}

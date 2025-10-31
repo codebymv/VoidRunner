@@ -182,8 +182,11 @@ export const GameCanvas = () => {
     }
   };
   
+  // Mobile scaling factor for fairer gameplay
+  const mobileScaleFactor = isMobile ? 0.75 : 1.0;
+  
   const gameRef = useRef({
-    ship: { x: 0, y: 0, vx: 0, vy: 0, radius: 28, angle: 0 },
+    ship: { x: 0, y: 0, vx: 0, vy: 0, radius: 28 * mobileScaleFactor, angle: 0 },
     planets: [] as Planet[],
     stars: [] as Star[],
     scraps: [] as Scrap[],
@@ -274,9 +277,14 @@ export const GameCanvas = () => {
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d")!;
-    // Make canvas 90% of window size to leave room for UI
+    // Make canvas responsive - smaller on mobile to leave room for UI and joystick
     canvas.width = window.innerWidth * 0.9;
-    canvas.height = window.innerHeight * 0.9;
+    if (isMobile) {
+      // On mobile, reduce height significantly to make room for joystick and UI
+      canvas.height = window.innerHeight * 0.70; // Increased from 0.65 to 0.70 for slightly more gameplay area
+    } else {
+      canvas.height = window.innerHeight * 0.9;
+    }
 
     // Initialize StarField
     if (!starFieldRef.current) {
@@ -289,7 +297,12 @@ export const GameCanvas = () => {
 
     const handleResize = () => {
       canvas.width = window.innerWidth * 0.9;
-      canvas.height = window.innerHeight * 0.9;
+      if (isMobile) {
+        // On mobile, reduce height significantly to make room for joystick and UI
+        canvas.height = window.innerHeight * 0.70;
+      } else {
+        canvas.height = window.innerHeight * 0.9;
+      }
       
       // Update StarField on resize
       if (starFieldRef.current) {
@@ -367,7 +380,7 @@ export const GameCanvas = () => {
         x, y,
         vx: (canvas.width / 2 - x) * 0.0005,
         vy: (canvas.height / 2 - y) * 0.0005,
-        radius: 32 + Math.random() * 25, // Increased from 25 + 20
+        radius: (32 + Math.random() * 25) * mobileScaleFactor, // Increased from 25 + 20
         mass: 1000 + Math.random() * 2000,
         color: colors[Math.floor(Math.random() * colors.length)],
         type: planetType
@@ -382,7 +395,7 @@ export const GameCanvas = () => {
         planet.vy *= 1.5;
         planet.rotation = 0;
         planet.rotationSpeed = 0.02 + Math.random() * 0.03; // Faster rotation than meteors
-        planet.radius = 26 + Math.random() * 18; // Increased from 20 + 15
+        planet.radius = (26 + Math.random() * 18) * mobileScaleFactor; // Increased from 20 + 15
         planet.mass = 800 + Math.random() * 1500; // Less massive than regular planets
       } else if (planetType === "blackhole") {
         // Blackholes are larger, slower, with stronger gravity
@@ -390,7 +403,7 @@ export const GameCanvas = () => {
         planet.vy *= 0.3;
         planet.rotation = 0;
         planet.rotationSpeed = 0.01 + Math.random() * 0.02; // Slow, ominous rotation
-        planet.radius = 42 + Math.random() * 30; // Increased from 35 + 25
+        planet.radius = (42 + Math.random() * 30) * mobileScaleFactor; // Increased from 35 + 25
         planet.mass = 2500 + Math.random() * 3000; // Much more massive
         planet.gravityMultiplier = 2.5 + Math.random() * 1.5; // 2.5x to 4x stronger gravity
         planet.color = "hsl(270, 50%, 20%)"; // Dark purple color
@@ -400,7 +413,7 @@ export const GameCanvas = () => {
         planet.vy *= 0.8;
         planet.rotation = 0;
         planet.rotationSpeed = 0.003 + Math.random() * 0.007; // Very slow rotation
-        planet.radius = 24 + Math.random() * 16; // Increased from 18 + 12
+        planet.radius = (24 + Math.random() * 16) * mobileScaleFactor; // Increased from 18 + 12
         planet.mass = 600 + Math.random() * 1000; // Lighter than regular planets
         planet.canBounce = true;
         planet.bounceCount = 0;
@@ -415,7 +428,7 @@ export const GameCanvas = () => {
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
         vx: 0, vy: 0,
-        radius: 6,
+        radius: 6 * mobileScaleFactor,
         collected: false
       });
     };
@@ -431,7 +444,7 @@ export const GameCanvas = () => {
       game.healthWrenches.push({
         x, y,
         vx: 0, vy: 0,
-        radius: 20, // Slightly larger than stars for visibility
+        radius: 20 * mobileScaleFactor, // Slightly larger than stars for visibility
         collected: false,
         pulsePhase: 0
       });
@@ -649,7 +662,7 @@ export const GameCanvas = () => {
               y: planet.y + (Math.random() - 0.5) * 20,
               vx: (Math.random() - 0.5) * 1.5, // Small random velocity
               vy: (Math.random() - 0.5) * 1.5,
-              radius: 8 + Math.random() * 6, // Small size (8-14 pixels)
+              radius: (8 + Math.random() * 6) * mobileScaleFactor, // Small size (8-14 pixels)
               lifespan: scrapLifespan,
               maxLifespan: scrapLifespan,
               rotation: Math.random() * Math.PI * 2,
@@ -1066,7 +1079,7 @@ export const GameCanvas = () => {
           const dx = star.x - game.ship.x;
           const dy = star.y - game.ship.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          const acquisitionRadius = 35; // Much larger acquisition radius
+          const acquisitionRadius = 35 * mobileScaleFactor; // Much larger acquisition radius
           if (dist < acquisitionRadius) {
             star.collected = true;
             createParticles(star.x, star.y, "hsl(60, 100%, 50%)", 15);
@@ -1085,7 +1098,7 @@ export const GameCanvas = () => {
           const dx = wrench.x - game.ship.x;
           const dy = wrench.y - game.ship.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          const acquisitionRadius = 40; // Slightly larger than stars
+          const acquisitionRadius = 40 * mobileScaleFactor; // Slightly larger than stars
           if (dist < acquisitionRadius) {
             wrench.collected = true;
             playSound('healthWrench');
@@ -1491,7 +1504,7 @@ export const GameCanvas = () => {
       }}
     >
       {/* Game Area Container */}
-      <div className="flex flex-col items-center justify-center w-full h-full p-1 sm:p-2 md:p-4">
+      <div className={`flex flex-col items-center w-full h-full p-1 sm:p-2 md:p-4 ${isMobile ? 'justify-start pt-2' : 'justify-center'}`}>
         {/* UI Header - Responsive Layout */}
         {gameState === "playing" && (
           <div className="w-full max-w-4xl mb-1 sm:mb-2 md:mb-4">
@@ -1631,7 +1644,7 @@ export const GameCanvas = () => {
         
         {/* UI Footer - Additional info could go here */}
         {gameState === "playing" && (
-          <div className="mt-2 sm:mt-4 text-xs sm:text-sm text-muted-foreground text-center px-2">
+          <div className={`mt-2 sm:mt-4 text-xs sm:text-sm text-muted-foreground text-center px-2 ${isMobile ? 'mb-20' : ''}`}>
             {isMobile ? (
               <p>Use joystick to move • Tap pause button to pause</p>
             ) : (
@@ -1708,7 +1721,7 @@ export const GameCanvas = () => {
       {isMobile && gameState === "playing" && (
         <VirtualJoystick
           onMove={setJoystickInput}
-          className="fixed bottom-2 left-2 z-10 sm:bottom-4 sm:left-4 md:bottom-6 md:left-6"
+          className="fixed bottom-20 left-2 z-10 sm:bottom-24 sm:left-4 md:bottom-28 md:left-6"
         />
       )}
     </div>
