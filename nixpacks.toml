@@ -1,5 +1,7 @@
-[providers]
-node = "22"
+providers = ["node"]
+
+[providers.node]
+version = "22"
 
 [phases.setup]
 nixPkgs = ["nodejs", "npm"]
