@@ -263,18 +263,7 @@ export const GameCanvas = () => {
     setAudioGameState(audioGameStateMap[gameState]);
   }, [gameState, setAudioGameState, GameState]);
 
-  // Initialize theme music on component mount
-  useEffect(() => {
-    const initAudio = async () => {
-      try {
-        await startThemeMusic();
-      } catch (error) {
-        console.log('Audio will start after user interaction');
-      }
-    };
-    
-    initAudio();
-  }, [startThemeMusic]);
+  // Audio will be initialized when the user starts the game (user gesture required)
 
   useEffect(() => {
     const canvas = canvasRef.current;
