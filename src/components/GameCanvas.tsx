@@ -76,7 +76,7 @@ interface HealthWrench extends GameObject {
 
 export const GameCanvas = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { setGameState: setAudioGameState, startThemeMusic, playSound, GameState } = useAudio();
+  const { setGameState: setAudioGameState, startThemeMusic, pauseThemeMusic, resumeThemeMusic, playSound, GameState } = useAudio();
   const { isMobile, isLandscape } = useMobile();
   const shipIdleImg = useRef<HTMLImageElement>(null!);
   const shipThrustImg = useRef<HTMLImageElement>(null!);
@@ -288,6 +288,44 @@ export const GameCanvas = () => {
     
     setAudioGameState(audioGameStateMap[gameState]);
   }, [gameState, setAudioGameState, GameState]);
+
+  // Handle page visibility changes to pause/resume music when Safari is minimized
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Page is hidden (Safari minimized, tab switched, etc.)
+        pauseThemeMusic();
+      } else {
+        // Page is visible again - only resume if game is playing
+        if (gameState === "playing") {
+          resumeThemeMusic();
+        }
+      }
+    };
+
+    const handleWindowBlur = () => {
+      // Window lost focus - pause music
+      pauseThemeMusic();
+    };
+
+    const handleWindowFocus = () => {
+      // Window gained focus - only resume if game is playing
+      if (gameState === "playing") {
+        resumeThemeMusic();
+      }
+    };
+
+    // Add event listeners for page visibility API and window focus/blur
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('focus', handleWindowFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('focus', handleWindowFocus);
+    };
+  }, [gameState, pauseThemeMusic, resumeThemeMusic]);
 
   // Audio will be initialized when the user starts the game (user gesture required)
 
