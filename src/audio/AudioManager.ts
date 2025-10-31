@@ -18,6 +18,7 @@ export class AudioManager {
   private masterGain: GainNode | null = null;
   private musicGain: GainNode | null = null;
   private soundEffectsGain: GainNode | null = null; // New sound effects bus
+  private isAudioInitialized: boolean = false; // Track if audio has been initialized
   
   // Theme music
   private themeAudio: HTMLAudioElement | null = null;
@@ -36,7 +37,7 @@ export class AudioManager {
   private readonly SOUND_EFFECT_VOLUME = 0.4; // 40%
   
   private constructor() {
-    this.initializeAudio();
+    // Don't initialize audio immediately - wait for user gesture
   }
   
   public static getInstance(): AudioManager {
@@ -72,6 +73,7 @@ export class AudioManager {
       // Set initial volume for menu state
       this.setThemeVolume(this.MENU_VOLUME);
       
+      this.isAudioInitialized = true;
       console.log('AudioManager initialized successfully');
     } catch (error) {
       console.error('Failed to initialize AudioManager:', error);
@@ -125,6 +127,12 @@ export class AudioManager {
   }
   
   public playSound(soundName: string): void {
+    // Don't play sounds if audio hasn't been initialized yet
+    if (!this.isAudioInitialized) {
+      console.log('Audio not initialized yet, sound will be skipped');
+      return;
+    }
+    
     // Special handling for shield sound to use the pool for overlapping playback
     if (soundName === 'shieldActivate') {
       if (this.shieldSoundPool.length === 0) {
@@ -166,6 +174,11 @@ export class AudioManager {
   }
   
   public async startThemeMusic(): Promise<void> {
+    // Initialize audio on first call (after user gesture)
+    if (!this.isAudioInitialized) {
+      await this.initializeAudio();
+    }
+    
     if (!this.themeAudio || this.isThemePlaying) return;
     
     try {

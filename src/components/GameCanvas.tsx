@@ -17,6 +17,7 @@ import blackholeSprite from "@/assets/blackhole3.png";
 import debrisSprite from "@/assets/debris4.png";
 import starSprite from "@/assets/star.png";
 import healthWrenchSprite from "@/assets/health_wrench.png";
+import scrapSprite from "@/assets/debris_scrap.png";
 import redCrossSprite from "@/assets/red_cross.png";
 import shieldSprite from "@/assets/shield.svg";
 import logoImage from "@/assets/logo.png";
@@ -238,7 +239,7 @@ export const GameCanvas = () => {
     debrisImg.current = debrisImage;
 
     const scrapImage = new Image();
-    scrapImage.src = "/src/assets/debris_scrap.png";
+    scrapImage.src = scrapSprite;
     scrapImg.current = scrapImage;
 
     const starImage = new Image();
