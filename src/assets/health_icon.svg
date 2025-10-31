@@ -1,0 +1,13 @@
+<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer glow -->
+  <circle cx="12" cy="12" r="11" fill="none" stroke="#00ffff" stroke-width="0.5" opacity="0.6"/>
+  
+  <!-- Cross background -->
+  <path d="M8 10h8v4h-8z M10 8h4v8h-4z" fill="#ff3333" stroke="#000" stroke-width="1"/>
+  
+  <!-- Cross highlight -->
+  <path d="M8 10h8v1h-8z M10 8h4v1h-4z" fill="#ff6666" opacity="0.8"/>
+  
+  <!-- Inner glow -->
+  <path d="M8 10h8v4h-8z M10 8h4v8h-4z" fill="none" stroke="#00ffff" stroke-width="0.3" opacity="0.4"/>
+</svg>

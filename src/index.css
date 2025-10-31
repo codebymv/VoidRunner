@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 240 30% 8%;
+    --foreground: 180 100% 95%;
+
+    --card: 240 25% 12%;
+    --card-foreground: 180 100% 95%;
+
+    --popover: 240 30% 10%;
+    --popover-foreground: 180 100% 95%;
+
+    --primary: 180 100% 50%;
+    --primary-foreground: 240 30% 8%;
+
+    --secondary: 320 100% 50%;
+    --secondary-foreground: 240 30% 8%;
+
+    --muted: 240 20% 20%;
+    --muted-foreground: 180 30% 70%;
+
+    --accent: 60 100% 50%;
+    --accent-foreground: 240 30% 8%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 240 20% 25%;
+    --input: 240 20% 20%;
+    --ring: 180 100% 50%;
+
+    --radius: 0.75rem;
+    
+    --glow-cyan: 180 100% 50%;
+    --glow-magenta: 320 100% 50%;
+    --glow-yellow: 60 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-gradient-to-b from-background via-[hsl(240,30%,6%)] to-black text-foreground overflow-hidden;
+  }
+}
+
+@layer utilities {
+  .glow-cyan {
+    filter: drop-shadow(0 0 8px hsl(var(--glow-cyan) / 0.8));
+  }
+  
+  .glow-magenta {
+    filter: drop-shadow(0 0 8px hsl(var(--glow-magenta) / 0.8));
+  }
+  
+  .glow-yellow {
+    filter: drop-shadow(0 0 8px hsl(var(--glow-yellow) / 0.8));
+  }
+  
+  .text-glow {
+    text-shadow: 0 0 20px currentColor;
+  }
+}
