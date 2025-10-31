@@ -76,7 +76,7 @@ interface HealthWrench extends GameObject {
 
 export const GameCanvas = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { setGameState: setAudioGameState, startThemeMusic, pauseThemeMusic, resumeThemeMusic, playSound, GameState } = useAudio();
+  const { setGameState: setAudioGameState, startThemeMusic, pauseThemeMusic, resumeThemeMusic, playSound, playMenuOpen, playMenuClose, GameState } = useAudio();
   const { isMobile, isLandscape } = useMobile();
   const shipIdleImg = useRef<HTMLImageElement>(null!);
   const shipThrustImg = useRef<HTMLImageElement>(null!);
@@ -170,6 +170,7 @@ export const GameCanvas = () => {
             const newHealth = prevHealth + remainingShield; // remainingShield is negative
             if (newHealth <= 0) {
               setGameState("gameover");
+              playMenuOpen(); // Play menu open sound when game over screen appears
               playSound('gameOver');
               if (score > highScore) {
                 setHighScore(score);
@@ -188,14 +189,15 @@ export const GameCanvas = () => {
       setHealth(prev => {
         const newHealth = prev - damageAmount;
         if (newHealth <= 0) {
-          setGameState("gameover");
-          playSound('gameOver');
-          if (score > highScore) {
-            setHighScore(score);
-            localStorage.setItem("orbitalHighScore", score.toString());
-            toast.success("New High Score!");
-          }
-        }
+              setGameState("gameover");
+              playMenuOpen(); // Play menu open sound when game over screen appears
+              playSound('gameOver');
+              if (score > highScore) {
+                setHighScore(score);
+                localStorage.setItem("orbitalHighScore", score.toString());
+                toast.success("New High Score!");
+              }
+            }
         return Math.max(0, newHealth);
       });
     }
@@ -1537,6 +1539,7 @@ export const GameCanvas = () => {
   }, [gameState, score, highScore, health]);
 
   const startGame = async () => {
+    playMenuClose(); // Play menu close sound when starting/resuming game
     setGameState("playing");
     setScore(0);
     setHealth(3.0); // Reset to full health
@@ -1649,7 +1652,10 @@ export const GameCanvas = () => {
                   
                   {/* Pause Button */}
                   <Button
-                    onClick={() => setGameState("paused")}
+                    onClick={() => {
+                      playMenuOpen();
+                      setGameState("paused");
+                    }}
                     variant="outline"
                     size="sm"
                     className="bg-black/50 border-primary/30 text-primary hover:bg-primary/20 touch-manipulation text-xs sm:text-sm"
@@ -1775,7 +1781,10 @@ export const GameCanvas = () => {
         <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-card/90 backdrop-blur-xl border border-primary/30 rounded-2xl p-6 sm:p-8 text-center space-y-3 sm:space-y-4 w-full max-w-sm">
             <h2 className="text-2xl sm:text-3xl font-bold text-primary glow-cyan">PAUSED</h2>
-            <Button onClick={() => setGameState("playing")} className="bg-primary text-primary-foreground hover:bg-primary/90 w-full">
+            <Button onClick={() => {
+              playMenuClose();
+              setGameState("playing");
+            }} className="bg-primary text-primary-foreground hover:bg-primary/90 w-full">
               RESUME
             </Button>
           </div>

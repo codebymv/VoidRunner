@@ -1,9 +1,12 @@
 import themeMusic from '../assets/theme.mp3';
+import theme2Music from '../assets/theme2.mp3';
 import gameOverSound from '../assets/game_over.mp3';
 import healthWrenchSound from '../assets/health_wrench.mp3';
 import shieldActivateSound from '../assets/shield_activate.mp3';
 import shipUpgradesSound from '../assets/ship_upgrades.mp3';
 import starAcquireSound from '../assets/star_aquire.mp3';
+import menuOpenSound from '../assets/menu_open.mp3';
+import menuCloseSound from '../assets/menu_close.mp3';
 
 export enum GameState {
   MENU = 'menu',
@@ -22,6 +25,8 @@ export class AudioManager {
   
   // Theme music
   private themeAudio: HTMLAudioElement | null = null;
+  private theme2Audio: HTMLAudioElement | null = null;
+  private currentTheme: 1 | 2 = 1; // Track which theme is currently playing
   private isThemePlaying: boolean = false;
   private currentGameState: GameState = GameState.MENU;
   
@@ -64,8 +69,19 @@ export class AudioManager {
       
       // Initialize theme music
       this.themeAudio = new Audio(themeMusic);
-      this.themeAudio.loop = true;
       this.themeAudio.preload = 'auto';
+      
+      this.theme2Audio = new Audio(theme2Music);
+      this.theme2Audio.preload = 'auto';
+      
+      // Set up alternating theme system - when one ends, play the other
+      this.themeAudio.addEventListener('ended', () => {
+        this.switchToTheme(2);
+      });
+      
+      this.theme2Audio.addEventListener('ended', () => {
+        this.switchToTheme(1);
+      });
       
       // Initialize sound effects
       this.initializeSoundEffects();
@@ -91,7 +107,9 @@ export class AudioManager {
       healthWrench: healthWrenchSound,
       shieldActivate: shieldActivateSound,
       shipUpgrades: shipUpgradesSound,
-      starAcquire: starAcquireSound
+      starAcquire: starAcquireSound,
+      menuOpen: menuOpenSound,
+      menuClose: menuCloseSound
     };
     
     Object.entries(soundFiles).forEach(([key, src]) => {
@@ -180,13 +198,40 @@ export class AudioManager {
     }
   }
   
+  private switchToTheme(themeNumber: 1 | 2): void {
+    if (!this.isThemePlaying) return; // Don't switch if music is not playing
+    
+    const currentAudio = this.currentTheme === 1 ? this.themeAudio : this.theme2Audio;
+    const nextAudio = themeNumber === 1 ? this.themeAudio : this.theme2Audio;
+    
+    if (!nextAudio) return;
+    
+    // Stop current theme
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    }
+    
+    // Start next theme
+    this.currentTheme = themeNumber;
+    nextAudio.currentTime = 0;
+    nextAudio.play().catch(error => {
+      console.error(`Failed to switch to theme ${themeNumber}:`, error);
+    });
+    
+    console.log(`Switched to theme ${themeNumber}`);
+  }
+  
   public async startThemeMusic(): Promise<void> {
     // Initialize audio on first call (after user gesture)
     if (!this.isAudioInitialized) {
       await this.initializeAudio();
     }
     
-    if (!this.themeAudio || this.isThemePlaying) return;
+    if (this.isThemePlaying) return;
+    
+    const currentAudio = this.currentTheme === 1 ? this.themeAudio : this.theme2Audio;
+    if (!currentAudio) return;
     
     try {
       // Resume audio context if suspended (required for user interaction)
@@ -194,44 +239,63 @@ export class AudioManager {
         await this.audioContext.resume();
       }
       
-      await this.themeAudio.play();
+      await currentAudio.play();
       this.isThemePlaying = true;
-      console.log('Theme music started');
+      console.log(`Theme ${this.currentTheme} music started`);
     } catch (error) {
       console.error('Failed to start theme music:', error);
     }
   }
   
   public stopThemeMusic(): void {
-    if (!this.themeAudio || !this.isThemePlaying) return;
+    if (!this.isThemePlaying) return;
     
-    this.themeAudio.pause();
-    this.themeAudio.currentTime = 0;
+    // Stop both themes
+    if (this.themeAudio) {
+      this.themeAudio.pause();
+      this.themeAudio.currentTime = 0;
+    }
+    if (this.theme2Audio) {
+      this.theme2Audio.pause();
+      this.theme2Audio.currentTime = 0;
+    }
+    
     this.isThemePlaying = false;
+    this.currentTheme = 1; // Reset to theme 1
     console.log('Theme music stopped');
   }
   
   public pauseThemeMusic(): void {
-    if (!this.themeAudio || !this.isThemePlaying) return;
+    if (!this.isThemePlaying) return;
     
-    this.themeAudio.pause();
+    const currentAudio = this.currentTheme === 1 ? this.themeAudio : this.theme2Audio;
+    if (currentAudio) {
+      currentAudio.pause();
+    }
+    
     this.isThemePlaying = false;
-    console.log('Theme music paused');
+    console.log(`Theme ${this.currentTheme} music paused`);
   }
   
   public resumeThemeMusic(): void {
-    if (!this.themeAudio || this.isThemePlaying) return;
+    if (this.isThemePlaying) return;
     
-    this.themeAudio.play().catch(error => {
+    const currentAudio = this.currentTheme === 1 ? this.themeAudio : this.theme2Audio;
+    if (!currentAudio) return;
+    
+    currentAudio.play().catch(error => {
       console.error('Failed to resume theme music:', error);
     });
     this.isThemePlaying = true;
-    console.log('Theme music resumed');
+    console.log(`Theme ${this.currentTheme} music resumed`);
   }
   
   private setThemeVolume(volume: number): void {
     if (this.themeAudio) {
       this.themeAudio.volume = Math.max(0, Math.min(1, volume));
+    }
+    if (this.theme2Audio) {
+      this.theme2Audio.volume = Math.max(0, Math.min(1, volume));
     }
     // Sync sound effects volume with music volume
     this.setSoundEffectsVolume(volume);
@@ -282,6 +346,14 @@ export class AudioManager {
     if (this.masterGain) {
       this.masterGain.gain.value = Math.max(0, Math.min(1, volume));
     }
+  }
+  
+  public playMenuOpen(): void {
+    this.playSound('menuOpen');
+  }
+  
+  public playMenuClose(): void {
+    this.playSound('menuClose');
   }
   
   public getMasterVolume(): number {

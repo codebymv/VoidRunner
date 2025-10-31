@@ -78,6 +78,8 @@ export const useAudio = () => {
     
     // Sound effects
     playSound,
+    playMenuOpen: () => audioManager.playMenuOpen(),
+    playMenuClose: () => audioManager.playMenuClose(),
     
     // Game states enum for convenience
     GameState
