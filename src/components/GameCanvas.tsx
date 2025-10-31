@@ -557,11 +557,11 @@ export const GameCanvas = () => {
 
       // Ship controls
       const speed = 0.3;
-      // Aggressive mobile optimization for tiny screens and thumb movements
-      // Mobile: Much higher multiplier (2.0) - 6.7x faster than keyboard for tiny thumb movements
-      // Desktop: Moderate multiplier (0.8) for precise control with mouse/trackpad
-      const joystickSpeed = isMobile ? 2.0 : 0.8;
-      const joystickThreshold = isMobile ? 0.01 : 0.05; // Very low threshold for mobile (1% vs 5%)
+      // Mobile-optimized speeds - much slower for small screen control
+      // Mobile: Much slower multiplier (0.2) - slower than keyboard for precise control
+      // Desktop: Standard multiplier (0.8) for responsive control with mouse/trackpad
+      const joystickSpeed = isMobile ? 0.2 : 0.8;
+      const joystickThreshold = isMobile ? 0.02 : 0.05; // Lower threshold for mobile (2% vs 5%)
       let isAccelerating = false;
       
       // Keyboard controls
