@@ -20,8 +20,8 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
   onMove,
   onStart,
   onEnd,
-  size = 120,
-  knobSize = 40,
+  size,
+  knobSize,
   className = ''
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -29,7 +29,21 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
   const [knobPosition, setKnobPosition] = useState({ x: 0, y: 0 });
   const [centerPosition, setCenterPosition] = useState({ x: 0, y: 0 });
 
-  const maxDistance = (size - knobSize) / 2;
+  // Responsive sizing based on screen width
+  const getResponsiveSize = () => {
+    if (size !== undefined) return size;
+    return window.innerWidth <= 375 ? 80 : window.innerWidth <= 480 ? 100 : 120;
+  };
+
+  const getResponsiveKnobSize = () => {
+    if (knobSize !== undefined) return knobSize;
+    return window.innerWidth <= 375 ? 25 : window.innerWidth <= 480 ? 32 : 40;
+  };
+
+  const [responsiveSize, setResponsiveSize] = useState(getResponsiveSize());
+  const [responsiveKnobSize, setResponsiveKnobSize] = useState(getResponsiveKnobSize());
+
+  const maxDistance = (responsiveSize - responsiveKnobSize) / 2;
 
   const updateCenterPosition = useCallback(() => {
     if (containerRef.current) {
@@ -41,11 +55,23 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
     }
   }, []);
 
+  const updateResponsiveSizes = useCallback(() => {
+    setResponsiveSize(getResponsiveSize());
+    setResponsiveKnobSize(getResponsiveKnobSize());
+  }, [size, knobSize]);
+
   useEffect(() => {
     updateCenterPosition();
-    window.addEventListener('resize', updateCenterPosition);
-    return () => window.removeEventListener('resize', updateCenterPosition);
-  }, [updateCenterPosition]);
+    updateResponsiveSizes();
+    
+    const handleResize = () => {
+      updateCenterPosition();
+      updateResponsiveSizes();
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [updateCenterPosition, updateResponsiveSizes]);
 
   const calculateJoystickData = useCallback((x: number, y: number): JoystickData => {
     const distance = Math.min(Math.sqrt(x * x + y * y), maxDistance);
@@ -143,8 +169,8 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
       ref={containerRef}
       className={`relative select-none touch-none ${className}`}
       style={{
-        width: size,
-        height: size,
+        width: responsiveSize,
+        height: responsiveSize,
       }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -155,8 +181,8 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
       <div
         className="absolute inset-0 rounded-full border-2 border-white/30 bg-black/20 backdrop-blur-sm"
         style={{
-          width: size,
-          height: size,
+          width: responsiveSize,
+          height: responsiveSize,
         }}
       />
       
@@ -168,10 +194,10 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
             : 'border-white/50 bg-white/30'
         }`}
         style={{
-          width: knobSize,
-          height: knobSize,
-          left: size / 2 - knobSize / 2 + knobPosition.x,
-          top: size / 2 - knobSize / 2 + knobPosition.y,
+          width: responsiveKnobSize,
+          height: responsiveKnobSize,
+          left: responsiveSize / 2 - responsiveKnobSize / 2 + knobPosition.x,
+          top: responsiveSize / 2 - responsiveKnobSize / 2 + knobPosition.y,
         }}
       />
       
@@ -179,8 +205,8 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
       <div
         className="absolute w-2 h-2 bg-white/60 rounded-full"
         style={{
-          left: size / 2 - 4,
-          top: size / 2 - 4,
+          left: responsiveSize / 2 - 4,
+          top: responsiveSize / 2 - 4,
         }}
       />
     </div>

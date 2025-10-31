@@ -1491,31 +1491,31 @@ export const GameCanvas = () => {
       }}
     >
       {/* Game Area Container */}
-      <div className="flex flex-col items-center justify-center w-full h-full p-2 sm:p-4">
+      <div className="flex flex-col items-center justify-center w-full h-full p-1 sm:p-2 md:p-4">
         {/* UI Header - Responsive Layout */}
         {gameState === "playing" && (
-          <div className="w-full max-w-4xl mb-2 sm:mb-4">
+          <div className="w-full max-w-4xl mb-1 sm:mb-2 md:mb-4">
             {isMobile ? (
               /* Mobile Layout - Stacked */
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {/* Top Row - Logo and Score */}
-                <div className="flex items-center justify-between px-2">
+                <div className="flex items-center justify-between px-1 sm:px-2">
                   <img 
                     src={logoImage} 
                     alt="Game Logo" 
-                    className="h-8 w-auto object-contain" 
+                    className="h-6 sm:h-8 w-auto object-contain" 
                   />
-                  <div className="text-2xl sm:text-3xl font-bold text-primary glow-cyan">{score}</div>
+                  <div className="text-xl sm:text-2xl md:text-3xl font-bold text-primary glow-cyan">{score}</div>
                 </div>
                 
                 {/* Bottom Row - Health, Shield, and Pause */}
-                <div className="flex items-center justify-between px-2">
+                <div className="flex items-center justify-between px-1 sm:px-2">
                   {/* Health and Shield */}
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     {/* Health Bar */}
-                    <div className="flex items-center gap-2">
-                      <img src={redCrossSprite} alt="Health" className="w-5 h-5 drop-shadow-lg" style={{filter: 'drop-shadow(0 0 4px #00ffff)'}} />
-                      <div className="relative w-20 h-2.5 bg-black/50 rounded-full border border-primary/30">
+                    <div className="flex items-center gap-1 sm:gap-2">
+                      <img src={redCrossSprite} alt="Health" className="w-4 sm:w-5 h-4 sm:h-5 drop-shadow-lg" style={{filter: 'drop-shadow(0 0 4px #00ffff)'}} />
+                      <div className="relative w-16 sm:w-20 h-2 sm:h-2.5 bg-black/50 rounded-full border border-primary/30">
                         <div 
                           className={`absolute top-0 left-0 h-full rounded-full transition-all duration-300 ${
                             health >= 2.5 ? 'bg-green-500' :
@@ -1536,14 +1536,14 @@ export const GameCanvas = () => {
                     </div>
                     
                     {/* Shield Bar */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 sm:gap-2">
                       <img 
                         src={shieldSprite} 
                         alt="Shield" 
-                        className={`w-5 h-5 drop-shadow-lg transition-opacity duration-300 ${shield > 0 ? 'opacity-100' : 'opacity-30'}`}
+                        className={`w-4 sm:w-5 h-4 sm:h-5 drop-shadow-lg transition-opacity duration-300 ${shield > 0 ? 'opacity-100' : 'opacity-30'}`}
                         style={{filter: shield > 0 ? 'drop-shadow(0 0 4px #3b82f6)' : 'drop-shadow(0 0 2px #64748b)'}} 
                       />
-                      <div className={`relative w-20 h-2.5 bg-black/50 rounded-full border transition-all duration-300 ${shield > 0 ? 'border-blue-500/50' : 'border-gray-500/30'}`}>
+                      <div className={`relative w-16 sm:w-20 h-2 sm:h-2.5 bg-black/50 rounded-full border transition-all duration-300 ${shield > 0 ? 'border-blue-500/50' : 'border-gray-500/30'}`}>
                         <div 
                           className="absolute top-0 left-0 h-full bg-blue-500 rounded-full transition-all duration-300"
                           style={{
@@ -1560,8 +1560,8 @@ export const GameCanvas = () => {
                     onClick={() => setGameState("paused")}
                     variant="outline"
                     size="sm"
-                    className="bg-black/50 border-primary/30 text-primary hover:bg-primary/20 touch-manipulation"
-                    style={{ minHeight: '44px', minWidth: '44px' }}
+                    className="bg-black/50 border-primary/30 text-primary hover:bg-primary/20 touch-manipulation text-xs sm:text-sm"
+                    style={{ minHeight: '36px', minWidth: '36px' }}
                   >
                     ⏸️
                   </Button>
@@ -1708,7 +1708,7 @@ export const GameCanvas = () => {
       {isMobile && gameState === "playing" && (
         <VirtualJoystick
           onMove={setJoystickInput}
-          className="fixed bottom-4 left-4 z-10 sm:bottom-6 sm:left-6"
+          className="fixed bottom-2 left-2 z-10 sm:bottom-4 sm:left-4 md:bottom-6 md:left-6"
         />
       )}
     </div>
