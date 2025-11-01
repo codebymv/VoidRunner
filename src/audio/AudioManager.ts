@@ -5,8 +5,11 @@ import healthWrenchSound from '../assets/health_wrench.mp3';
 import shieldActivateSound from '../assets/shield_activate.mp3';
 import shipUpgradesSound from '../assets/ship_upgrades.mp3';
 import starAcquireSound from '../assets/star_aquire.mp3';
+import starAcquire2Sound from '../assets/star_aquire2.mp3';
+import shipHitSound from '../assets/ship_hit.mp3';
 import menuOpenSound from '../assets/menu_open.mp3';
 import menuCloseSound from '../assets/menu_close.mp3';
+import vulnerableBlinkSound from '../assets/vulnerable_blink.mp3';
 
 export enum GameState {
   MENU = 'menu',
@@ -35,11 +38,17 @@ export class AudioManager {
   private soundEffectSources: Map<string, MediaElementAudioSourceNode> = new Map(); // Web Audio API sources
   private shieldSoundPool: HTMLAudioElement[] = []; // Pool of shield sounds for overlapping playback
   private shieldPoolIndex: number = 0; // Current index in the shield sound pool
+  private starAcquireCounter: number = 0; // Counter for alternating star acquire sounds
   
   // Volume levels
   private readonly MENU_VOLUME = 0.06; // 6% (1/3 of original 18%)
   private readonly GAMEPLAY_VOLUME = 0.083; // 8.3% (1/3 of original 25%)
   private readonly SOUND_EFFECT_VOLUME = 0.4; // 40%
+  
+  // Mute state
+  private isMuted: boolean = false;
+  private volumeBeforeMute: number = 1; // Store volume level before muting
+  private themeVolumeBeforeMute: number = 0; // Store theme volume before muting
   
   private constructor() {
     // Don't initialize audio immediately - wait for user gesture
@@ -108,8 +117,11 @@ export class AudioManager {
       shieldActivate: shieldActivateSound,
       shipUpgrades: shipUpgradesSound,
       starAcquire: starAcquireSound,
+      starAcquire2: starAcquire2Sound,
+      shipHit: shipHitSound,
       menuOpen: menuOpenSound,
-      menuClose: menuCloseSound
+      menuClose: menuCloseSound,
+      vulnerableBlink: vulnerableBlinkSound
     };
     
     Object.entries(soundFiles).forEach(([key, src]) => {
@@ -144,10 +156,18 @@ export class AudioManager {
     console.log('Sound effects initialized and routed through audio bus');
   }
   
-  public playSound(soundName: string): void {
-    // Don't play sounds if audio hasn't been initialized yet
+  public async playSound(soundName: string): Promise<void> {
+    console.log(`🔊 Attempting to play sound: ${soundName}`);
+    
+    // Initialize audio on first call (after user gesture)
     if (!this.isAudioInitialized) {
-      console.log('Audio not initialized yet, sound will be skipped');
+      console.log('🎵 Audio not initialized, initializing now...');
+      await this.initializeAudio();
+    }
+    
+    // Don't play sounds if audio initialization failed
+    if (!this.isAudioInitialized) {
+      console.log('❌ Audio initialization failed, sound will be skipped');
       return;
     }
     
@@ -173,28 +193,58 @@ export class AudioManager {
       return;
     }
 
+    // Special handling for star acquire sound to alternate between two sounds
+    if (soundName === 'starAcquire') {
+      const actualSoundName = this.starAcquireCounter % 2 === 0 ? 'starAcquire' : 'starAcquire2';
+      this.starAcquireCounter++;
+      
+      const audio = this.soundEffects.get(actualSoundName);
+      if (!audio) {
+        console.warn(`❌ Star acquire sound '${actualSoundName}' not found`);
+        return;
+      }
+      
+      try {
+        audio.volume = 0.95;
+        audio.currentTime = 0;
+        console.log(`🎵 Playing alternating star acquire sound: ${actualSoundName}`);
+        audio.play().catch(error => {
+          console.error(`❌ Failed to play star acquire sound '${actualSoundName}':`, error);
+        });
+      } catch (error) {
+        console.error(`❌ Error playing star acquire sound '${actualSoundName}':`, error);
+      }
+      return;
+    }
+
     // Regular sound effect handling
     const audio = this.soundEffects.get(soundName);
     if (!audio) {
-      console.warn(`Sound effect '${soundName}' not found`);
+      console.warn(`❌ Sound effect '${soundName}' not found in soundEffects map`);
+      console.log('Available sounds:', Array.from(this.soundEffects.keys()));
       return;
     }
+    
+    console.log(`✅ Found sound '${soundName}', attempting to play...`);
     
     try {
       // Special handling for game over sound - make it louder
       if (soundName === 'gameOver') {
-        audio.volume = 1.0; // Maximum volume (was 1.5 which is invalid)
+        audio.volume = 1.0; // Maximum volume (unchanged)
+      } else if (soundName === 'shipHit') {
+        audio.volume = 1.0; // Increased from 0.9 to maximum volume
       } else {
-        audio.volume = 0.8; // Normal volume for other sounds
+        audio.volume = 0.95; // Increased from 0.8 to 0.95 for other sounds
       }
       
       // Reset audio to beginning and play
       audio.currentTime = 0;
+      console.log(`🎵 Playing sound '${soundName}' at volume ${audio.volume}`);
       audio.play().catch(error => {
-        console.error(`Failed to play sound '${soundName}':`, error);
+        console.error(`❌ Failed to play sound '${soundName}':`, error);
       });
     } catch (error) {
-      console.error(`Error playing sound '${soundName}':`, error);
+      console.error(`❌ Error playing sound '${soundName}':`, error);
     }
   }
   
@@ -291,20 +341,29 @@ export class AudioManager {
   }
   
   private setThemeVolume(volume: number): void {
-    if (this.themeAudio) {
-      this.themeAudio.volume = Math.max(0, Math.min(1, volume));
+    const clampedVolume = Math.max(0, Math.min(1, volume));
+    
+    if (this.isMuted) {
+      // If muted, store the volume but don't apply it
+      this.themeVolumeBeforeMute = clampedVolume;
+    } else {
+      // If not muted, apply the volume directly
+      if (this.themeAudio) {
+        this.themeAudio.volume = clampedVolume;
+      }
+      if (this.theme2Audio) {
+        this.theme2Audio.volume = clampedVolume;
+      }
     }
-    if (this.theme2Audio) {
-      this.theme2Audio.volume = Math.max(0, Math.min(1, volume));
-    }
+    
     // Sync sound effects volume with music volume
     this.setSoundEffectsVolume(volume);
   }
   
   private setSoundEffectsVolume(volume: number): void {
     if (this.soundEffectsGain) {
-      // Sound effects at half the volume of music
-      this.soundEffectsGain.gain.value = Math.max(0, Math.min(1, volume * 0.5));
+      // Sound effects at 80% the volume of music (increased from 50%)
+      this.soundEffectsGain.gain.value = Math.max(0, Math.min(1, volume * 0.8));
     }
   }
   
@@ -344,20 +403,80 @@ export class AudioManager {
   
   public setMasterVolume(volume: number): void {
     if (this.masterGain) {
-      this.masterGain.gain.value = Math.max(0, Math.min(1, volume));
+      const clampedVolume = Math.max(0, Math.min(1, volume));
+      if (this.isMuted) {
+        // If muted, store the new volume but don't apply it
+        this.volumeBeforeMute = clampedVolume;
+      } else {
+        // If not muted, apply the volume directly
+        this.masterGain.gain.value = clampedVolume;
+      }
     }
   }
   
-  public playMenuOpen(): void {
-    this.playSound('menuOpen');
+  public async playMenuOpen(): Promise<void> {
+    console.log('🔊 playMenuOpen() called');
+    await this.playSound('menuOpen');
   }
   
-  public playMenuClose(): void {
-    this.playSound('menuClose');
+  public async playMenuClose(): Promise<void> {
+    console.log('🔊 playMenuClose() called');
+    await this.playSound('menuClose');
   }
   
   public getMasterVolume(): number {
+    if (this.isMuted) {
+      // When muted, return the stored volume level, not the actual gain value (which is 0)
+      return this.volumeBeforeMute;
+    }
     return this.masterGain?.gain.value || 1;
+  }
+  
+  public toggleMute(): boolean {
+    this.isMuted = !this.isMuted;
+    this.updateMuteState();
+    return this.isMuted;
+  }
+  
+  public setMute(muted: boolean): void {
+    this.isMuted = muted;
+    this.updateMuteState();
+  }
+  
+  public isMutedState(): boolean {
+    return this.isMuted;
+  }
+  
+  private updateMuteState(): void {
+    if (this.isMuted) {
+      // Store current volumes before muting
+      if (this.masterGain) {
+        this.volumeBeforeMute = this.masterGain.gain.value;
+        this.masterGain.gain.value = 0;
+      }
+      
+      // Store and mute theme music volumes
+      if (this.themeAudio) {
+        this.themeVolumeBeforeMute = this.themeAudio.volume;
+        this.themeAudio.volume = 0;
+      }
+      if (this.theme2Audio) {
+        this.theme2Audio.volume = 0;
+      }
+    } else {
+      // Restore previous volumes when unmuting
+      if (this.masterGain) {
+        this.masterGain.gain.value = this.volumeBeforeMute;
+      }
+      
+      // Restore theme music volumes
+      if (this.themeAudio) {
+        this.themeAudio.volume = this.themeVolumeBeforeMute;
+      }
+      if (this.theme2Audio) {
+        this.theme2Audio.volume = this.themeVolumeBeforeMute;
+      }
+    }
   }
   
   // Cleanup method

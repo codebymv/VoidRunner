@@ -35,7 +35,7 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove, isVisi
     <div className="fixed bottom-8 left-8 z-50">
       <Joystick
         size={120}
-        stickSize={50}
+        stickSize={70}
         baseColor="rgba(59, 130, 246, 0.3)"
         stickColor="rgba(59, 130, 246, 0.8)"
         throttle={16} // ~60fps

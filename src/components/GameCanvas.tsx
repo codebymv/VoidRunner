@@ -5,6 +5,7 @@ import { StarField } from "@/utils/StarField";
 import { useAudio } from "@/hooks/useAudio";
 import { useMobile } from "@/hooks/useMobile";
 import { VirtualJoystick } from "./VirtualJoystick";
+import { HamburgerMenu } from "./HamburgerMenu";
 import shipIdleSprite from "@/assets/ship-idle.png";
 import shipThrustSprite from "@/assets/ship-thrust.png";
 import ship2IdleSprite from "@/assets/ship2-idle.png";
@@ -16,6 +17,8 @@ import planet2Sprite from "@/assets/planet2.png";
 import blackholeSprite from "@/assets/blackhole3.png";
 import debrisSprite from "@/assets/debris4.png";
 import starSprite from "@/assets/star.png";
+import starUpgradeSprite from "@/assets/star_upgrade.png";
+import starUpgrade2Sprite from "@/assets/star_upgrade2.png";
 import healthWrenchSprite from "@/assets/health_wrench.png";
 import scrapSprite from "@/assets/debris_scrap.png";
 import redCrossSprite from "@/assets/red_cross.png";
@@ -76,7 +79,7 @@ interface HealthWrench extends GameObject {
 
 export const GameCanvas = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { setGameState: setAudioGameState, startThemeMusic, pauseThemeMusic, resumeThemeMusic, playSound, playMenuOpen, playMenuClose, GameState } = useAudio();
+  const { setGameState: setAudioGameState, startThemeMusic, pauseThemeMusic, resumeThemeMusic, playSound, playMenuOpen, playMenuClose, GameState, isMuted, toggleMute } = useAudio();
   const { isMobile, isLandscape } = useMobile();
   const shipIdleImg = useRef<HTMLImageElement>(null!);
   const shipThrustImg = useRef<HTMLImageElement>(null!);
@@ -90,6 +93,8 @@ export const GameCanvas = () => {
   const debrisImg = useRef<HTMLImageElement>(null!);
   const scrapImg = useRef<HTMLImageElement>(null!);
   const starImg = useRef<HTMLImageElement>(null!);
+  const starUpgradeImg = useRef<HTMLImageElement>(null!);
+  const starUpgrade2Img = useRef<HTMLImageElement>(null!);
   const healthWrenchImg = useRef<HTMLImageElement>(null!);
   const starFieldRef = useRef<StarField | null>(null);
   const [gameState, setGameState] = useState<"menu" | "playing" | "paused" | "gameover">("menu");
@@ -128,17 +133,18 @@ export const GameCanvas = () => {
    // Mobile controls state
    const [joystickInput, setJoystickInput] = useState({ x: 0, y: 0 });
    const joystickInputRef = useRef({ x: 0, y: 0 }); // Ref to hold current joystick input
-   const [showJoystick, setShowJoystick] = useState(false); // Toggle for desktop joystick testing
+   const [showJoystick, setShowJoystick] = useState(isMobile); // Show by default on mobile, hidden on desktop
 
-   // Debug wrapper for setJoystickInput with useCallback for stable reference
+   // Handle joystick toggle from hamburger menu
+  const handleToggleJoystick = useCallback(() => {
+    setShowJoystick(prev => !prev);
+  }, []);
+
+   // Handle joystick input with useCallback for stable reference
    const handleJoystickInput = useCallback((input: { x: number; y: number }) => {
-     console.log('🔄 GameCanvas received joystick input:', JSON.stringify(input));
-     
      // Update both ref and state
      joystickInputRef.current = input;
      setJoystickInput(input);
-     
-     console.log('🔄 Updated joystickInputRef.current to:', JSON.stringify(joystickInputRef.current));
    }, []);
 
    // Log when joystickInput state actually changes
@@ -159,6 +165,9 @@ export const GameCanvas = () => {
 
   // Helper function to handle damage that prioritizes shield over health
   const takeDamage = (damageAmount: number) => {
+    // Play ship hit sound whenever damage is taken
+    playSound('shipHit').catch(console.error);
+    
     if (shield > 0) {
       // Shield taking damage - no sound here, sound plays when becoming vulnerable
       // Damage shield first
@@ -170,8 +179,8 @@ export const GameCanvas = () => {
             const newHealth = prevHealth + remainingShield; // remainingShield is negative
             if (newHealth <= 0) {
               setGameState("gameover");
-              playMenuOpen(); // Play menu open sound when game over screen appears
-              playSound('gameOver');
+              playMenuOpen().catch(console.error); // Play menu open sound when game over screen appears
+              playSound('gameOver').catch(console.error);
               if (score > highScore) {
                 setHighScore(score);
                 localStorage.setItem("orbitalHighScore", score.toString());
@@ -190,8 +199,8 @@ export const GameCanvas = () => {
         const newHealth = prev - damageAmount;
         if (newHealth <= 0) {
               setGameState("gameover");
-              playMenuOpen(); // Play menu open sound when game over screen appears
-              playSound('gameOver');
+              playMenuOpen().catch(console.error); // Play menu open sound when game over screen appears
+              playSound('gameOver').catch(console.error);
               if (score > highScore) {
                 setHighScore(score);
                 localStorage.setItem("orbitalHighScore", score.toString());
@@ -273,6 +282,14 @@ export const GameCanvas = () => {
     const starImage = new Image();
     starImage.src = starSprite;
     starImg.current = starImage;
+
+    const starUpgradeImage = new Image();
+    starUpgradeImage.src = starUpgradeSprite;
+    starUpgradeImg.current = starUpgradeImage;
+
+    const starUpgrade2Image = new Image();
+    starUpgrade2Image.src = starUpgrade2Sprite;
+    starUpgrade2Img.current = starUpgrade2Image;
 
     const healthWrenchImage = new Image();
     healthWrenchImage.src = healthWrenchSprite;
@@ -370,16 +387,21 @@ export const GameCanvas = () => {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'j' || e.key === 'J') {
+        handleToggleJoystick();
+        return; // Don't process this key further
+      }
+      
+      if (e.key === 'm' || e.key === 'M') {
+        toggleMute();
+        return; // Don't process this key further
+      }
+      
       game.keys[e.key.toLowerCase()] = true;
       if (e.key === "Escape" && gameState === "playing") {
         e.preventDefault();
+        playMenuOpen().catch(console.error);
         setGameState("paused");
-      }
-      // Toggle joystick visibility for desktop testing (J key)
-      if (e.key.toLowerCase() === "j" && !isMobile) {
-        e.preventDefault();
-        setShowJoystick(prev => !prev);
-        toast(showJoystick ? "Joystick hidden" : "Joystick visible - Test mobile controls!");
       }
     };
 
@@ -598,9 +620,9 @@ export const GameCanvas = () => {
       // Ship controls
       const speed = 0.3;
       // Mobile-optimized speeds - much slower for small screen control
-      // Mobile: Much slower multiplier (0.2) - slower than keyboard for precise control
-      // Desktop: Standard multiplier (0.8) for responsive control with mouse/trackpad
-      const joystickSpeed = isMobile ? 0.2 : 0.8;
+      // Mobile: Much slower multiplier (0.15) - slower than keyboard for precise control
+      // Desktop: Matching WASD speed (0.3) for consistent control experience
+      const joystickSpeed = isMobile ? 0.15 : 0.3;
       const joystickThreshold = isMobile ? 0.02 : 0.05; // Lower threshold for mobile (2% vs 5%)
       let isAccelerating = false;
       
@@ -707,8 +729,18 @@ export const GameCanvas = () => {
             createExplosion(planet.x, planet.y, megaBlastRadius, megaBlastForce, []);
             
             // Add score bonus for witnessing black hole collapse
-            setScore(prev => prev + 500);
-            toast("Black hole collapsed! +500 points", { duration: 3000 });
+            setScore(prev => {
+              const newScore = prev + 500;
+              const isNewHighScore = newScore > highScore;
+              
+              // Show toast with dynamic color based on high score status
+              toast("Black hole collapsed! +500 points", { 
+                duration: 3000,
+                className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+              });
+              
+              return newScore;
+            });
             
             return false; // Remove the black hole
           }
@@ -1006,7 +1038,18 @@ export const GameCanvas = () => {
               createParticles(meteor.x, meteor.y, "hsl(0, 100%, 70%)", 8); // Red-orange meteor trail
               
               // Award bonus points for the collision
-              setScore(prev => prev + 100);
+              setScore(prev => {
+                const newScore = prev + 100;
+                const isNewHighScore = newScore > highScore;
+                
+                // Show toast with dynamic color based on high score status
+                toast("Meteor collision! +100 points", { 
+                  duration: 2000,
+                  className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                });
+                
+                return newScore;
+              });
               
               // Remove only the planet
               game.planets.splice(planetIndex, 1);
@@ -1040,8 +1083,18 @@ export const GameCanvas = () => {
                 createExplosion(explosionX, explosionY, megaBlastRadius, megaBlastForce, [index1, index2]);
                 
                 // Add score bonus for witnessing black hole collapse
-                setScore(prev => prev + 500);
-                toast("Black hole collapsed! +500 points", { duration: 3000 });
+                setScore(prev => {
+                  const newScore = prev + 500;
+                  const isNewHighScore = newScore > highScore;
+                  
+                  // Show toast with dynamic color based on high score status
+                  toast("Black hole collapsed! +500 points", { 
+                    duration: 3000,
+                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                  });
+                  
+                  return newScore;
+                });
               } else {
                 // Create enhanced black hole with progressive growth
                 const blastRadius = 120 + Math.random() * 40;
@@ -1077,7 +1130,18 @@ export const GameCanvas = () => {
                 });
                 
                 // Add score for black hole merger
-                setScore(prev => prev + 100);
+                setScore(prev => {
+                  const newScore = prev + 100;
+                  const isNewHighScore = newScore > highScore;
+                  
+                  // Show toast with dynamic color based on high score status
+                  toast("Black hole merger! +100 points", { 
+                    duration: 2000,
+                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                  });
+                  
+                  return newScore;
+                });
               }
               
               // Remove both original blackholes
@@ -1109,6 +1173,10 @@ export const GameCanvas = () => {
 
       // Collision detection
       if (game.invulnerable > 0) {
+        // Play vulnerable blink sound at the start of each visible phase
+        if (game.invulnerable % 10 === 0) {
+          playSound('vulnerableBlink').catch(console.error);
+        }
         game.invulnerable--;
       } else {
         // Planet collisions (33% damage)
@@ -1156,7 +1224,30 @@ export const GameCanvas = () => {
             star.collected = true;
             createParticles(star.x, star.y, "hsl(60, 100%, 50%)", 15);
             const starValue = getStarValue(score);
-            setScore(prev => prev + starValue);
+            
+            setScore(prev => {
+              const newScore = prev + starValue;
+              const isNewHighScore = newScore > highScore;
+              
+              // Determine star level based on star value
+              let starLevel: number;
+              if (starValue === 1000) {
+                starLevel = 3;
+              } else if (starValue === 100) {
+                starLevel = 2;
+              } else {
+                starLevel = 1;
+              }
+              
+              // Show toast with dynamic color based on high score status
+              toast(`Lvl ${starLevel} Star Collected! +${starValue} points`, { 
+                duration: 1500,
+                className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+              });
+              
+              return newScore;
+            });
+            
             playSound('starAcquire');
           }
         }
@@ -1411,9 +1502,22 @@ export const GameCanvas = () => {
         ctx.shadowBlur = 15;
         ctx.shadowColor = "hsl(60, 100%, 50%)";
         
+        // Determine which star sprite to use based on current score (ship level)
+        let starImage: HTMLImageElement;
+        if (score >= 5000) {
+          // Ship level 3 - stars worth 1000 points
+          starImage = starUpgrade2Img.current;
+        } else if (score >= 1500) {
+          // Ship level 2 - stars worth 100 points
+          starImage = starUpgradeImg.current;
+        } else {
+          // Ship level 1 - stars worth 10 points
+          starImage = starImg.current;
+        }
+        
         const spriteSize = star.radius * 4; // Make the star image larger than the original circle
         ctx.drawImage(
-          starImg.current,
+          starImage,
           star.x - spriteSize / 2,
           star.y - spriteSize / 2,
           spriteSize,
@@ -1539,7 +1643,7 @@ export const GameCanvas = () => {
   }, [gameState, score, highScore, health]);
 
   const startGame = async () => {
-    playMenuClose(); // Play menu close sound when starting/resuming game
+    playMenuClose().catch(console.error); // Play menu close sound when starting/resuming game
     setGameState("playing");
     setScore(0);
     setHealth(3.0); // Reset to full health
@@ -1592,15 +1696,36 @@ export const GameCanvas = () => {
                     className="h-6 sm:h-8 w-auto object-contain" 
                   />
                   
-                  {/* Help Icon */}
-                  <button
-                    onClick={() => setShowHelp(!showHelp)}
-                    className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 text-primary hover:bg-primary/30 transition-colors flex items-center justify-center text-lg font-bold z-[70]"
-                  >
-                    ?
-                  </button>
+                  {/* Center section with High Score and Current Score */}
+                  <div className="flex flex-col items-center gap-0.5 sm:gap-1">
+                    {highScore > 0 && (
+                      <div className="text-xs sm:text-sm text-accent glow-yellow">
+                        High Score: {highScore}
+                      </div>
+                    )}
+                    <div className={`text-xl sm:text-2xl md:text-3xl font-bold transition-colors duration-300 ${
+                      score > highScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'
+                    }`}>
+                      {score}
+                    </div>
+                  </div>
                   
-                  <div className="text-xl sm:text-2xl md:text-3xl font-bold text-primary glow-cyan">{score}</div>
+                  {/* Help Icon and Hamburger Menu */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowHelp(!showHelp)}
+                      className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 text-primary hover:bg-primary/30 transition-colors flex items-center justify-center text-lg font-bold z-[70]"
+                    >
+                      ?
+                    </button>
+                    <HamburgerMenu 
+                      showJoystick={showJoystick}
+                      onToggleJoystick={handleToggleJoystick}
+                      isMobile={isMobile}
+                      isMuted={isMuted}
+                      onToggleMute={toggleMute}
+                    />
+                  </div>
                 </div>
                 
                 {/* Bottom Row - Health, Shield, and Pause */}
@@ -1653,7 +1778,8 @@ export const GameCanvas = () => {
                   {/* Pause Button */}
                   <Button
                     onClick={() => {
-                      playMenuOpen();
+                      console.log("🎮 PAUSE BUTTON CLICKED - About to call playMenuOpen()");
+                      playMenuOpen().catch(console.error);
                       setGameState("paused");
                     }}
                     variant="outline"
@@ -1675,10 +1801,31 @@ export const GameCanvas = () => {
                     alt="Game Logo" 
                     className="h-10 w-auto object-contain" 
                   />
-                  <div className="text-4xl font-bold text-primary glow-cyan text-glow">{score}</div>
+                  <div className="flex items-center gap-8">
+                    {highScore > 0 && (
+                      <div className="flex flex-col items-center">
+                        <div className="text-sm text-accent glow-yellow opacity-80">
+                          High Score
+                        </div>
+                        <div className="text-2xl font-bold text-accent glow-yellow">
+                          {highScore}
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex flex-col items-center">
+                      <div className="text-sm text-primary glow-cyan opacity-80">
+                        Score
+                      </div>
+                      <div className={`text-4xl font-bold transition-colors duration-300 ${
+                        score > highScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'
+                      } text-glow`}>
+                        {score}
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 
-                {/* Right side - Health and Shield */}
+                {/* Right side - Health, Shield, and Menu */}
                 <div className="flex items-center gap-4">
                   <img src={redCrossSprite} alt="Health" className="w-6 h-6 drop-shadow-lg" style={{filter: 'drop-shadow(0 0 4px #00ffff)'}} />
                   <div className="relative w-32 h-3 bg-black/50 rounded-full border border-primary/30">
@@ -1716,6 +1863,15 @@ export const GameCanvas = () => {
                       }}
                     />
                   </div>
+                  
+                  {/* Hamburger Menu */}
+                  <HamburgerMenu 
+                    showJoystick={showJoystick}
+                    onToggleJoystick={handleToggleJoystick}
+                    isMobile={isMobile}
+                    isMuted={isMuted}
+                    onToggleMute={toggleMute}
+                  />
                 </div>
               </div>
             )}
@@ -1782,7 +1938,7 @@ export const GameCanvas = () => {
           <div className="bg-card/90 backdrop-blur-xl border border-primary/30 rounded-2xl p-6 sm:p-8 text-center space-y-3 sm:space-y-4 w-full max-w-sm">
             <h2 className="text-2xl sm:text-3xl font-bold text-primary glow-cyan">PAUSED</h2>
             <Button onClick={() => {
-              playMenuClose();
+              playMenuClose().catch(console.error);
               setGameState("playing");
             }} className="bg-primary text-primary-foreground hover:bg-primary/90 w-full">
               RESUME
@@ -1796,8 +1952,15 @@ export const GameCanvas = () => {
           <div className="bg-card/90 backdrop-blur-xl border border-destructive/50 rounded-2xl p-6 sm:p-12 text-center space-y-4 sm:space-y-6 w-full max-w-md">
             <img src={gameOverImage} alt="Game Over" className="w-48 sm:w-64 h-auto mx-auto" />
             <div className="space-y-1 sm:space-y-2">
-              <div className="text-xl sm:text-2xl">Score: <span className="text-accent glow-yellow font-bold">{score}</span></div>
-              <div className="text-lg sm:text-xl text-muted-foreground">High Score: {highScore}</div>
+              <div className="text-xl sm:text-2xl">
+                Score: <span className={`font-bold transition-colors duration-300 ${
+                  score >= highScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'
+                }`}>{score}</span>
+                {score >= highScore && score > 0 && (
+                  <div className="text-sm text-accent glow-yellow animate-pulse">NEW HIGH SCORE!</div>
+                )}
+              </div>
+              <div className="text-lg sm:text-xl text-muted-foreground">Previous High Score: {score >= highScore && score > 0 ? (highScore === score ? 'None' : highScore) : highScore}</div>
             </div>
             <Button onClick={startGame} size="lg" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 glow-cyan">
               PLAY AGAIN
@@ -1806,18 +1969,11 @@ export const GameCanvas = () => {
         </div>
       )}
       
-      {/* Virtual Joystick - Always visible when game is playing */}
+      {/* Virtual Joystick - Visible on mobile or when toggled on desktop */}
       <VirtualJoystick
         onMove={handleJoystickInput}
-        isVisible={gameState === "playing"}
+        isVisible={gameState === "playing" && (isMobile || showJoystick)}
       />
-      
-      {/* Desktop Joystick Toggle Hint */}
-      {!isMobile && gameState === "playing" && !showJoystick && (
-        <div className="fixed bottom-4 right-4 z-10 bg-black/70 text-white px-3 py-2 rounded-lg text-sm backdrop-blur-sm border border-cyan-500/30">
-          Press <kbd className="bg-cyan-500/20 px-2 py-1 rounded text-cyan-300 font-mono">J</kbd> to toggle joystick
-        </div>
-      )}
     </div>
   );
 };

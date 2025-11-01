@@ -5,6 +5,7 @@ export const useAudio = () => {
   const [isThemePlaying, setIsThemePlaying] = useState(false);
   const [currentGameState, setCurrentGameState] = useState<GameState>(GameState.MENU);
   const [masterVolume, setMasterVolumeState] = useState(1);
+  const [isMuted, setIsMutedState] = useState(false);
 
   // Update local state when audio manager state changes
   useEffect(() => {
@@ -12,6 +13,7 @@ export const useAudio = () => {
       setIsThemePlaying(audioManager.isThemeMusicPlaying());
       setCurrentGameState(audioManager.getCurrentGameState());
       setMasterVolumeState(audioManager.getMasterVolume());
+      setIsMutedState(audioManager.isMutedState());
     };
 
     // Initial state update
@@ -54,8 +56,19 @@ export const useAudio = () => {
     setMasterVolumeState(audioManager.getMasterVolume());
   }, []);
 
-  const playSound = useCallback((soundName: string) => {
-    audioManager.playSound(soundName);
+  const toggleMute = useCallback(() => {
+    const newMutedState = audioManager.toggleMute();
+    setIsMutedState(newMutedState);
+    return newMutedState;
+  }, []);
+
+  const setMute = useCallback((muted: boolean) => {
+    audioManager.setMute(muted);
+    setIsMutedState(audioManager.isMutedState());
+  }, []);
+
+  const playSound = useCallback(async (soundName: string) => {
+    await audioManager.playSound(soundName);
   }, []);
 
   return {
@@ -63,6 +76,7 @@ export const useAudio = () => {
     isThemePlaying,
     currentGameState,
     masterVolume,
+    isMuted,
     
     // Theme music controls
     startThemeMusic,
@@ -76,10 +90,20 @@ export const useAudio = () => {
     // Volume controls
     setMasterVolume,
     
+    // Mute controls
+    toggleMute,
+    setMute,
+    
     // Sound effects
     playSound,
-    playMenuOpen: () => audioManager.playMenuOpen(),
-    playMenuClose: () => audioManager.playMenuClose(),
+    playMenuOpen: async () => {
+      console.log('🎵 useAudio playMenuOpen called');
+      await audioManager.playMenuOpen();
+    },
+    playMenuClose: async () => {
+      console.log('🎵 useAudio playMenuClose called');
+      await audioManager.playMenuClose();
+    },
     
     // Game states enum for convenience
     GameState
