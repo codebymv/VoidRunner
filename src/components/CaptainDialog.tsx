@@ -12,15 +12,32 @@ export const CaptainDialog: React.FC<CaptainDialogProps> = ({ isVisible, onCompl
   const [currentImage, setCurrentImage] = useState(0);
   const [isAnimatingIn, setIsAnimatingIn] = useState(false);
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
+  const [shouldRender, setShouldRender] = useState(false);
 
   const images = [talk1, talk2];
   const dialogMessage = message || "Heh, don't say I didn't warn ya..."; // Use custom message or default
   const displayDuration = 5000; // 5 seconds (reduced from 10 seconds)
   const imageSwapInterval = 800; // Switch images every 800ms
 
+  // Parse message to separate gestures (in parentheses) from actual dialogue
+  const parseMessage = (msg: string): { gestures: string[], words: string } => {
+    // Match everything in parentheses as gestures
+    const gestureMatches = msg.match(/\([^)]+\)/g) || [];
+    // Remove gestures and ellipses/dots to get just the words
+    const words = msg.replace(/\([^)]+\)/g, '').replace(/\.\.\./g, '').trim();
+    
+    return {
+      gestures: gestureMatches,
+      words: words
+    };
+  };
+
+  const { gestures, words } = parseMessage(dialogMessage);
+
   useEffect(() => {
     if (isVisible) {
-      // Start animation in
+      // Start rendering and animation in
+      setShouldRender(true);
       setIsAnimatingIn(true);
       setIsAnimatingOut(false);
       
@@ -36,6 +53,7 @@ export const CaptainDialog: React.FC<CaptainDialogProps> = ({ isVisible, onCompl
         
         // Complete after exit animation
         setTimeout(() => {
+          setShouldRender(false);
           onComplete();
         }, 500); // Exit animation duration
       }, displayDuration);
@@ -45,9 +63,25 @@ export const CaptainDialog: React.FC<CaptainDialogProps> = ({ isVisible, onCompl
         clearTimeout(exitTimer);
       };
     }
-  }, [isVisible, onComplete]);
+  }, [isVisible, onComplete, imageSwapInterval]);
 
-  if (!isVisible) return null;
+  // Handle exit animation when visibility becomes false while dialog is showing
+  useEffect(() => {
+    if (!isVisible && shouldRender) {
+      // If visibility becomes false while dialog is showing, trigger exit animation
+      setIsAnimatingOut(true);
+      setIsAnimatingIn(false);
+      
+      // Stop rendering after exit animation completes
+      const exitTimer = setTimeout(() => {
+        setShouldRender(false);
+      }, 500); // Exit animation duration
+      
+      return () => clearTimeout(exitTimer);
+    }
+  }, [isVisible, shouldRender]);
+
+  if (!shouldRender) return null;
 
   return (
     <div className="fixed inset-0 pointer-events-none z-50">
@@ -55,7 +89,7 @@ export const CaptainDialog: React.FC<CaptainDialogProps> = ({ isVisible, onCompl
       <div 
         className={`
           absolute top-1/2 -translate-y-1/2 
-          bg-gradient-to-br from-slate-800/95 to-slate-900/95 
+          bg-gradient-to-br from-slate-800/70 to-slate-900/70 
           backdrop-blur-sm border border-slate-600/50 
           rounded-xl shadow-2xl p-4 flex items-center gap-4
           transition-all duration-500 ease-out
@@ -86,9 +120,27 @@ export const CaptainDialog: React.FC<CaptainDialogProps> = ({ isVisible, onCompl
             Captain
           </div>
           
-          {/* Message */}
-          <div className="text-white text-sm leading-relaxed break-words">
-            {dialogMessage}
+          {/* Message - Separated Gestures and Words */}
+          <div className="space-y-1">
+            {/* Gestures (actions) - italicized and muted */}
+            {gestures.length > 0 && (
+              <div className="text-xs italic text-slate-400 flex flex-wrap gap-1">
+                {gestures.map((gesture, index) => (
+                  <span key={index} className="inline-block">
+                    {gesture}
+                  </span>
+                ))}
+              </div>
+            )}
+            
+            {/* Actual spoken words - bold and underlined for emphasis */}
+            {words && (
+              <div className="text-white text-sm leading-relaxed break-words">
+                <span className="font-semibold underline decoration-blue-400/50 decoration-2 underline-offset-2">
+                  {words}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

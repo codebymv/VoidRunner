@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "./ui/button";
-import { priorityToast, toastManager } from "@/utils/toastPriority";
+import { priorityToast, toastManager, formatToastWithCombo } from "@/utils/toastPriority";
 import { StarField } from "@/utils/StarField";
 import { useAudio } from "@/hooks/useAudio";
 import { useMobile } from "@/hooks/useMobile";
@@ -8,6 +8,7 @@ import { VirtualJoystick } from "./VirtualJoystick";
 import { HamburgerMenu } from "./HamburgerMenu";
 import { CaptainDialog } from "./CaptainDialog";
 import { DifficultyManager, type DifficultyLevel } from "../utils/difficultyConfig";
+import { AudioManager } from "@/audio/AudioManager";
 import shipIdleSprite from "@/assets/ship-idle.png";
 import shipThrustSprite from "@/assets/ship-thrust.png";
 import ship2IdleSprite from "@/assets/ship2-idle.png";
@@ -29,6 +30,12 @@ import logoImage from "@/assets/logo.png";
 import gameOverImage from "@/assets/game_over.png";
 import speech1Audio from "@/assets/speech1.mp3";
 import speech2Audio from "@/assets/speech2.mp3";
+import unlimitedAmmoImage from '@/assets/unlimited_ammo.png';
+import trophyImage from '@/assets/trophy.png';
+import { createBullet, updateBullets, checkBulletPlanetCollision, checkBulletScrapCollision, calculateDamage, getMaxHealth, FIRE_RATE, AUTO_FIRE_RATE, AMMO_DRAIN_RATE, RECHARGE_TIME, BULLET_SPEED } from "@/utils/shooting";
+import { renderBullets } from "@/utils/bulletRenderer";
+import { createAmmoPowerUp, shouldSpawnAmmoPowerUp, renderAmmoPowerUp, UNLIMITED_AMMO_DURATION } from "@/utils/ammoPowerUpSpawning";
+import { findNearestEnemy, calculateLeadShot } from "@/utils/autoTargeting";
 
 interface GameObject {
   x: number;
@@ -49,6 +56,9 @@ interface Planet extends GameObject {
   canBounce?: boolean; // Debris can bounce off other obstacles
   bounceCount?: number; // Track number of bounces for debris
   lastScrapSpawn?: number; // Track last scrap spawn time for debris
+  health?: number; // Health for shooting mechanics
+  maxHealth?: number; // Maximum health
+  flashUntil?: number; // Timestamp for white flash effect when damaged
 }
 
 interface Star extends GameObject {
@@ -82,6 +92,17 @@ interface HealthWrench extends GameObject {
   pulsePhase: number; // For visual pulsing effect
 }
 
+interface Bullet extends GameObject {
+  lifetime: number; // How long the bullet has been alive (for fade/despawn)
+  maxLifetime: number; // Maximum bullet lifetime
+  isPurple?: boolean; // Purple bullets for level 3 ship (more damage)
+}
+
+interface AmmoPowerUp extends GameObject {
+  collected: boolean;
+  pulsePhase: number; // For visual pulsing effect
+}
+
 export const GameCanvas = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { setGameState: setAudioGameState, startThemeMusic, pauseThemeMusic, resumeThemeMusic, playSound, playMenuOpen, playMenuClose, GameState, isMuted, toggleMute } = useAudio();
@@ -101,6 +122,7 @@ export const GameCanvas = () => {
   const starUpgradeImg = useRef<HTMLImageElement>(null!);
   const starUpgrade2Img = useRef<HTMLImageElement>(null!);
   const healthWrenchImg = useRef<HTMLImageElement>(null!);
+  const unlimitedAmmoImg = useRef<HTMLImageElement>(null!);
   const starFieldRef = useRef<StarField | null>(null);
   const [gameState, setGameState] = useState<"menu" | "playing" | "paused" | "gameover">("menu");
   const [score, setScore] = useState(0);
@@ -108,9 +130,21 @@ export const GameCanvas = () => {
   const [previousHighScore, setPreviousHighScore] = useState(() => parseInt(localStorage.getItem("orbitalHighScore") || "0")); // Track previous high score for display
   const [health, setHealth] = useState(3.0); // Changed from lives to health for fractional damage support
   const [shield, setShield] = useState(0.0); // Overshield that absorbs damage first (max 3.0)
+  const healthGlowEndTimeRef = useRef(0); // Immediate ref for glow timing (no render delay)
   const [hasUpgraded, setHasUpgraded] = useState(false); // Track if ship has been upgraded to ship2
   const [hasUpgradedToShip3, setHasUpgradedToShip3] = useState(false); // Track if ship has been upgraded to ship3
   const [showHelp, setShowHelp] = useState(false); // State for help popup
+  
+  // Shooting system state
+  const [ammo, setAmmo] = useState(100);
+  const maxAmmo = hasUpgradedToShip3 ? 200 : 100; // Double ammo for level 3
+  const [isRecharging, setIsRecharging] = useState(false);
+  const hasWeapon = hasUpgraded; // Weapon unlocks at ship level 2+
+  const [isUnlimitedAmmo, setIsUnlimitedAmmo] = useState(false);
+  const [unlimitedAmmoEndTime, setUnlimitedAmmoEndTime] = useState(0);
+  const lastShotTimeRef = useRef(0);
+  const lastAutoShotTimeRef = useRef(0); // Separate timer for auto-fire
+  const rechargeStartTimeRef = useRef(0);
   const [showCaptainDialog, setShowCaptainDialog] = useState(false); // State for captain dialog
   const [showLevelUpDialog, setShowLevelUpDialog] = useState(false); // State for level-up captain dialog
   const [showGameOverDialog, setShowGameOverDialog] = useState(false); // State for game over captain dialog
@@ -229,6 +263,46 @@ export const GameCanvas = () => {
     }
   };
 
+  // Helper function to award points with combo tracking
+  const awardPoints = (message: string, basePoints: number, duration: number = 1500) => {
+    const now = Date.now();
+    const COMBO_WINDOW = 3000; // 3 seconds to keep combo going
+    const game = gameRef.current;
+    
+    // Reset combo if too much time has passed
+    if (now - game.lastComboTime > COMBO_WINDOW) {
+      game.comboCount = 0;
+    }
+    
+    // Increment combo
+    game.comboCount++;
+    game.lastComboTime = now;
+    
+    // Calculate multiplier (1.0 to 3.0 based on combo)
+    const multiplier = Math.min(1.0 + (game.comboCount - 1) * 0.2, 3.0);
+    const finalPoints = Math.floor(basePoints * multiplier);
+    
+    setScore(prev => {
+      const newScore = prev + finalPoints;
+      const isNewHighScore = newScore > highScore;
+      
+      // Format message with combo info
+      const formattedMessage = formatToastWithCombo(message, basePoints, game.comboCount, multiplier, isNewHighScore);
+      
+      priorityToast(formattedMessage, finalPoints, {
+        duration,
+        className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`,
+        comboInfo: game.comboCount > 1 ? {
+          combo: game.comboCount,
+          multiplier,
+          basePoints
+        } : undefined
+      });
+      
+      return newScore;
+    });
+  };
+
   // Helper function to handle damage that prioritizes shield over health
   const takeDamage = (damageAmount: number) => {
     // Play ship hit sound whenever damage is taken
@@ -254,6 +328,7 @@ export const GameCanvas = () => {
               
               setGameState("gameover");
               toastManager.clearQueue(); // Clear all pending toasts when game over
+              AudioManager.getInstance().stopShipEngineLoops(); // Stop ship engine loops on game over
               playMenuOpen().catch(console.error); // Play menu open sound when game over screen appears
               playSound('gameOver').catch(console.error);
               
@@ -288,6 +363,7 @@ export const GameCanvas = () => {
               
               setGameState("gameover");
               toastManager.clearQueue(); // Clear all pending toasts when game over
+              AudioManager.getInstance().stopShipEngineLoops(); // Stop ship engine loops on game over
               playMenuOpen().catch(console.error); // Play menu open sound when game over screen appears
               playSound('gameOver').catch(console.error);
               
@@ -316,10 +392,13 @@ export const GameCanvas = () => {
     healthWrenches: [] as HealthWrench[],
     particles: [] as Particle[],
     shipTrails: [] as ShipTrail[],
+    bullets: [] as Bullet[],
+    ammoPowerUps: [] as AmmoPowerUp[],
     keys: {} as Record<string, boolean>,
     mouse: { x: 0, y: 0 },
     lastPlanetSpawn: 0,
     lastStarSpawn: 0,
+    lastAmmoPowerUpSpawn: 0,
     lastHealthWrenchSpawn: 0,
     gameStartTime: 0,
     difficulty: 1,
@@ -327,6 +406,8 @@ export const GameCanvas = () => {
     shake: 0,
     nearMissTracker: new Map<string, number>(), // Track near-miss cooldowns for each planet
     planetIdCounter: 0, // Counter for generating unique planet IDs
+    comboCount: 0, // Track consecutive scoring actions
+    lastComboTime: 0, // Track when last combo action happened
   });
 
   useEffect(() => {
@@ -389,6 +470,10 @@ export const GameCanvas = () => {
     const healthWrenchImage = new Image();
     healthWrenchImage.src = healthWrenchSprite;
     healthWrenchImg.current = healthWrenchImage;
+
+    const unlimitedAmmo = new Image();
+    unlimitedAmmo.src = unlimitedAmmoImage;
+    unlimitedAmmoImg.current = unlimitedAmmo;
   }, []);
 
   // Sync game state with audio system
@@ -496,6 +581,7 @@ export const GameCanvas = () => {
       if (e.key === "Escape" && gameState === "playing") {
         e.preventDefault();
         playMenuOpen().catch(console.error);
+        AudioManager.getInstance().stopShipEngineLoops(); // Stop ship engine loops when paused
         setGameState("paused");
       }
     };
@@ -595,6 +681,10 @@ export const GameCanvas = () => {
         planet.color = "hsl(30, 70%, 60%)"; // Metallic orange/brown color
       }
 
+      // Initialize health for shooting mechanics
+      planet.health = getMaxHealth(planet.type);
+      planet.maxHealth = planet.health;
+
       game.planets.push(planet);
     };
 
@@ -687,6 +777,9 @@ export const GameCanvas = () => {
       const now = Date.now();
       const delta = (now - lastTime) / 16.67;
       lastTime = now;
+      
+      // Update toast threshold based on current score to reduce notification spam in late game
+      toastManager.updateThreshold(score);
 
       ctx.fillStyle = "rgb(10, 10, 20)"; // Solid background to prevent trails
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -730,6 +823,103 @@ export const GameCanvas = () => {
         game.ship.vy += currentJoystick.y * joystickSpeed;
         isAccelerating = true;
       }
+
+      // Update ship engine state based on acceleration (crossfade idle/thrust loops)
+      AudioManager.getInstance().setShipEngineState(isAccelerating ? 'thrust' : 'idle');
+
+      // Manual shooting mechanics (Space key)
+      // Level 2: Blue bullets, Level 3: Purple bullets
+      if (hasWeapon && game.keys[" "] && !isRecharging) {
+        const shootNow = Date.now();
+        if (shootNow - lastShotTimeRef.current > FIRE_RATE) {
+          if (isUnlimitedAmmo || ammo > 0) {
+            // Create bullet - ONLY purple at level 3 (score >= 5000)
+            // Level 2 (score 1500-4999) = blue bullets (hasUpgradedToShip3 = false)
+            // Level 3 (score 5000+) = purple bullets (hasUpgradedToShip3 = true)
+            const bullet = createBullet(game.ship, hasUpgradedToShip3);
+            game.bullets.push(bullet);
+            
+            // Drain ammo (unless unlimited)
+            if (!isUnlimitedAmmo) {
+              setAmmo(prev => {
+                const newAmmo = prev - AMMO_DRAIN_RATE;
+                if (newAmmo <= 0) {
+                  setIsRecharging(true);
+                  rechargeStartTimeRef.current = shootNow;
+                  playSound('chargeEmpty').catch(() => {}); // Ammo depleted sound
+                }
+                return Math.max(0, newAmmo);
+              });
+            }
+            
+            lastShotTimeRef.current = shootNow;
+            // Play appropriate shoot sound: shoot1 (blue/level 2), shoot2 (purple/level 3)
+            const shootSound = hasUpgradedToShip3 ? 'shoot2' : 'shoot1';
+            playSound(shootSound).catch(() => {});
+          }
+        }
+      }
+
+      // AI Auto-targeting (Level 3 only)
+      if (hasUpgradedToShip3 && hasWeapon && !isRecharging) {
+        const autoShootNow = Date.now();
+        if (autoShootNow - lastAutoShotTimeRef.current > AUTO_FIRE_RATE) {
+          if (isUnlimitedAmmo || ammo > 0) {
+            // Find nearest enemy
+            const target = findNearestEnemy(game.ship, game.planets, 400 * mobileScaleFactor);
+            
+            if (target) {
+              // Calculate lead shot for moving targets
+              const targetAngle = calculateLeadShot(game.ship, target.planet, BULLET_SPEED);
+              
+              // Create auto-targeting bullet
+              const bullet = createBullet(game.ship, true, targetAngle);
+              game.bullets.push(bullet);
+              
+              // Drain ammo (unless unlimited)
+              if (!isUnlimitedAmmo) {
+                setAmmo(prev => {
+                  const newAmmo = prev - AMMO_DRAIN_RATE;
+                  if (newAmmo <= 0) {
+                    setIsRecharging(true);
+                    rechargeStartTimeRef.current = autoShootNow;
+                    playSound('chargeEmpty').catch(() => {}); // Ammo depleted sound
+                  }
+                  return Math.max(0, newAmmo);
+                });
+              }
+              
+              lastAutoShotTimeRef.current = autoShootNow;
+              // Auto-fire always uses purple bullets (level 3 only)
+              playSound('shoot2').catch(() => {});
+            }
+          }
+        }
+      }
+
+      // Handle ammo recharge
+      if (isRecharging) {
+        const rechNow = Date.now();
+        const rechargeProgress = (rechNow - rechargeStartTimeRef.current) / RECHARGE_TIME;
+        if (rechargeProgress >= 1) {
+          setAmmo(maxAmmo); // Recharge to full (100 or 200)
+          setIsRecharging(false);
+          playSound('chargeReady').catch(() => {}); // Ammo ready sound
+        } else {
+          setAmmo(Math.floor(rechargeProgress * maxAmmo));
+        }
+      }
+
+      // Handle unlimited ammo expiration
+      if (isUnlimitedAmmo) {
+        const unlimNow = Date.now();
+        if (unlimNow > unlimitedAmmoEndTime) {
+          setIsUnlimitedAmmo(false);
+        }
+      }
+
+      // Update bullets
+      game.bullets = updateBullets(game.bullets, delta);
 
       // Gravity from planets
       game.planets.forEach(planet => {
@@ -1328,6 +1518,68 @@ export const GameCanvas = () => {
         });
       });
 
+      // Bullet collisions with obstacles
+      game.bullets = game.bullets.filter(bullet => {
+        let bulletHit = false;
+        
+        // Check bullet-planet collisions
+        game.planets.forEach(planet => {
+          if (bulletHit) return;
+          
+          if (checkBulletPlanetCollision(bullet, planet)) {
+            bulletHit = true;
+            
+            // Deal damage (purple bullets do 50% more)
+            const damage = calculateDamage(planet.type, bullet.isPurple);
+            planet.health = (planet.health || planet.maxHealth || 100) - damage;
+            
+            // Flash white briefly to indicate damage
+            planet.flashUntil = Date.now() + 80; // 80ms flash duration
+            
+            createParticles(bullet.x, bullet.y, "hsl(200, 100%, 70%)", 5);
+            
+            // Check if destroyed
+            if (planet.health <= 0) {
+              const planetIndex = game.planets.indexOf(planet);
+              if (planetIndex > -1) {
+                // Award points based on type
+                const points = planet.type === 'blackhole' ? 500 :
+                              planet.type === 'planet2' ? 200 :
+                              planet.type === 'meteor' ? 150 : 100;
+                setScore(prev => {
+                  const newScore = prev + points;
+                  priorityToast(`Destroyed ${planet.type}! +${points}`, points, {
+                    duration: 1500,
+                    className: newScore > highScore ? 'text-yellow-400 glow-blue font-bold' : 'text-blue-400 glow-blue font-bold'
+                  });
+                  return newScore;
+                });
+                
+                createParticles(planet.x, planet.y, planet.color, 30);
+                playSound('explosion').catch(() => {}); // Play explosion sound for obstacle destruction
+                game.planets.splice(planetIndex, 1);
+              }
+            }
+          }
+        });
+        
+        // Check bullet-scrap collisions (destroy scrap)
+        game.scraps.forEach(scrap => {
+          if (bulletHit) return;
+          
+          if (checkBulletScrapCollision(bullet, scrap)) {
+            bulletHit = true;
+            const scrapIndex = game.scraps.indexOf(scrap);
+            if (scrapIndex > -1) {
+              createParticles(bullet.x, bullet.y, "hsl(30, 100%, 60%)", 5);
+              game.scraps.splice(scrapIndex, 1);
+            }
+          }
+        });
+        
+        return !bulletHit; // Keep bullet if it didn't hit anything
+      });
+
       // Collision detection
       if (game.invulnerable > 0) {
         // Play vulnerable blink sound at the start of each visible phase
@@ -1425,17 +1677,7 @@ export const GameCanvas = () => {
           
           if (dist < collectionRadius && dist >= damageRadius) {
             // Scrap collection for points (safe distance)
-            setScore(prev => {
-              const newScore = prev + 25;
-              const isNewHighScore = newScore > highScore;
-              
-              priorityToast("Scrap collected! +25 points", 25, { 
-                duration: 1500,
-                className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
-              });
-              
-              return newScore;
-            });
+            awardPoints("Scrap collected!", 25, 1500);
             
             createParticles(scrap.x, scrap.y, "hsl(120, 100%, 50%)", 12); // Green collection particles
             playSound('starAcquire');
@@ -1474,28 +1716,18 @@ export const GameCanvas = () => {
             createParticles(star.x, star.y, "hsl(60, 100%, 50%)", 15);
             const starValue = getStarValue(score);
             
-            setScore(prev => {
-              const newScore = prev + starValue;
-              const isNewHighScore = newScore > highScore;
-              
-              // Determine star level based on star value
-              let starLevel: number;
-              if (starValue === 1000) {
-                starLevel = 3;
-              } else if (starValue === 100) {
-                starLevel = 2;
-              } else {
-                starLevel = 1;
-              }
-              
-              // Show toast with dynamic color based on high score status
-              priorityToast(`Lvl ${starLevel} Star Collected! +${starValue} points`, starValue, { 
-                duration: 1500,
-                className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
-              });
-              
-              return newScore;
-            });
+            // Determine star level based on star value
+            let starLevel: number;
+            if (starValue === 1000) {
+              starLevel = 3;
+            } else if (starValue === 100) {
+              starLevel = 2;
+            } else {
+              starLevel = 1;
+            }
+            
+            // Award star points with combo
+            awardPoints(`Lvl ${starLevel} Star Collected!`, starValue, 1500);
             
             playSound('starAcquire');
           }
@@ -1515,6 +1747,9 @@ export const GameCanvas = () => {
             wrench.collected = true;
             playSound('healthWrench');
             
+            // Trigger green health glow effect for 1 second (use ref for immediate feedback)
+            healthGlowEndTimeRef.current = Date.now() + 1000;
+            
             // If health is full, add to shield instead
             if (health >= 3.0) {
               setShield(prev => Math.min(3.0, prev + 0.75)); // Add 25% shield
@@ -1533,6 +1768,30 @@ export const GameCanvas = () => {
       });
 
       game.healthWrenches = game.healthWrenches.filter(wrench => !wrench.collected);
+
+      // Ammo power-up collection
+      game.ammoPowerUps.forEach(powerUp => {
+        if (!powerUp.collected) {
+          const dx = powerUp.x - game.ship.x;
+          const dy = powerUp.y - game.ship.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < game.ship.radius + powerUp.radius) {
+            powerUp.collected = true;
+            setIsUnlimitedAmmo(true);
+            setUnlimitedAmmoEndTime(Date.now() + UNLIMITED_AMMO_DURATION);
+            setAmmo(100);
+            setIsRecharging(false);
+            playSound('unlimitedAmmo').catch(() => {}); // Play unlimited ammo pickup sound
+            createParticles(powerUp.x, powerUp.y, "hsl(45, 100%, 50%)", 30);
+            priorityToast("Unlimited Ammo!", 1000, {
+              duration: 2000,
+              className: 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-900 font-bold shadow-lg'
+            });
+          }
+        }
+      });
+
+      game.ammoPowerUps = game.ammoPowerUps.filter(p => !p.collected);
 
       // Star-Obstacle interactions
       game.stars.forEach((star, starIndex) => {
@@ -1685,6 +1944,13 @@ export const GameCanvas = () => {
         }
       }
 
+      // Spawn ammo power-ups (ship level 2+ only)
+      if (shouldSpawnAmmoPowerUp(now, game.lastAmmoPowerUpSpawn, hasWeapon)) {
+        const ammoPowerUp = createAmmoPowerUp(canvas.width, canvas.height, mobileScaleFactor, game.ship.x, game.ship.y);
+        game.ammoPowerUps.push(ammoPowerUp);
+        game.lastAmmoPowerUpSpawn = now;
+      }
+
       // Render
       game.particles.forEach(p => {
         ctx.globalAlpha = p.life;
@@ -1694,6 +1960,9 @@ export const GameCanvas = () => {
         ctx.fill();
       });
       ctx.globalAlpha = 1;
+
+      // Render bullets (gold when unlimited ammo is active)
+      renderBullets(ctx, game.bullets, isUnlimitedAmmo);
 
       game.planets.forEach(planet => {
         if (planet.type === "meteor" && meteorImg.current && meteorImg.current.complete) {
@@ -1786,6 +2055,29 @@ export const GameCanvas = () => {
           ctx.arc(planet.x, planet.y, planet.radius, 0, Math.PI * 2);
           ctx.fill();
           ctx.shadowBlur = 0;
+        }
+      });
+
+      // Apply white flash effect to damaged obstacles
+      game.planets.forEach(planet => {
+        if (planet.flashUntil && Date.now() < planet.flashUntil) {
+          ctx.save();
+          
+          // Draw a bright white radial flash at the center (doesn't affect transparent parts)
+          const flashRadius = planet.radius * 0.4; // 40% of obstacle size for central flash
+          const gradient = ctx.createRadialGradient(
+            planet.x, planet.y, 0,
+            planet.x, planet.y, flashRadius
+          );
+          gradient.addColorStop(0, "rgba(255, 255, 255, 0.95)"); // Very bright white center
+          gradient.addColorStop(0.5, "rgba(255, 255, 255, 0.6)"); // Fade mid-way
+          gradient.addColorStop(1, "rgba(255, 255, 255, 0)"); // Transparent edge
+          
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(planet.x, planet.y, flashRadius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
         }
       });
 
@@ -1891,6 +2183,11 @@ export const GameCanvas = () => {
         ctx.restore();
       });
 
+      // Ammo power-ups
+      game.ammoPowerUps.forEach(powerUp => {
+        renderAmmoPowerUp(ctx, powerUp, unlimitedAmmoImg.current);
+      });
+
       // Render ship trails
       game.shipTrails.forEach((trail, index) => {
         const alpha = trail.life * 0.5;
@@ -1907,19 +2204,91 @@ export const GameCanvas = () => {
 
       // Ship shield (matches health meter color, or blue if overshield is active)
       if (game.invulnerable > 0 && game.invulnerable % 10 < 5) {
-        ctx.globalAlpha = 0.5;
+        ctx.save();
+        
         // Use blue color if overshield is active, otherwise match health meter colors
         const shieldColor = shield > 0 ? '#3b82f6' :      // Blue for overshield
-                           health >= 2.5 ? '#22c55e' :    // Green
-                           health >= 1.5 ? '#eab308' :    // Yellow
-                           health > 0 ? '#ef4444' :       // Red
+                           health >= 2.5 ? '#22c55e' :    // Green (full health)
+                           health >= 1.5 ? '#eab308' :    // Yellow (medium health)
+                           health > 0 ? '#ef4444' :       // Red (low health)
                            '#666666';                     // Gray for no health
+        
+        // Add extra glow for shield (blue)
+        if (shield > 0) {
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = shieldColor;
+        }
+        
+        // Draw main shield circle
+        ctx.globalAlpha = 0.5;
         ctx.strokeStyle = shieldColor;
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.arc(game.ship.x, game.ship.y, game.ship.radius + 5, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.globalAlpha = 1;
+        
+        // Draw cracks based on health status
+        const shieldRadius = game.ship.radius + 5;
+        
+        // Yellow (medium health) - a few cracks
+        if (health >= 1.5 && health < 2.5 && shield === 0) {
+          ctx.globalAlpha = 0.7;
+          ctx.strokeStyle = shieldColor;
+          ctx.lineWidth = 2;
+          
+          // Draw 3-4 cracks
+          const crackAngles = [0.3, 1.8, 3.5, 5.0];
+          crackAngles.forEach(angle => {
+            const startAngle = angle;
+            const endAngle = angle + 0.4;
+            ctx.beginPath();
+            ctx.moveTo(
+              game.ship.x + Math.cos(startAngle) * (shieldRadius - 3),
+              game.ship.y + Math.sin(startAngle) * (shieldRadius - 3)
+            );
+            ctx.lineTo(
+              game.ship.x + Math.cos(endAngle) * (shieldRadius + 3),
+              game.ship.y + Math.sin(endAngle) * (shieldRadius + 3)
+            );
+            ctx.stroke();
+          });
+        }
+        
+        // Red (low health) - many cracks
+        if (health > 0 && health < 1.5 && shield === 0) {
+          ctx.globalAlpha = 0.8;
+          ctx.strokeStyle = shieldColor;
+          ctx.lineWidth = 2;
+          
+          // Draw 8-10 cracks (more damaged)
+          const crackAngles = [0.2, 0.9, 1.6, 2.3, 3.0, 3.7, 4.4, 5.1, 5.8];
+          crackAngles.forEach(angle => {
+            const startAngle = angle;
+            const endAngle = angle + 0.5;
+            ctx.beginPath();
+            ctx.moveTo(
+              game.ship.x + Math.cos(startAngle) * (shieldRadius - 4),
+              game.ship.y + Math.sin(startAngle) * (shieldRadius - 4)
+            );
+            ctx.lineTo(
+              game.ship.x + Math.cos(endAngle) * (shieldRadius + 4),
+              game.ship.y + Math.sin(endAngle) * (shieldRadius + 4)
+            );
+            ctx.stroke();
+            
+            // Add small perpendicular cracks for extra damage look
+            const midAngle = (startAngle + endAngle) / 2;
+            const midX = game.ship.x + Math.cos(midAngle) * shieldRadius;
+            const midY = game.ship.y + Math.sin(midAngle) * shieldRadius;
+            const perpAngle = midAngle + Math.PI / 2;
+            ctx.beginPath();
+            ctx.moveTo(midX - Math.cos(perpAngle) * 3, midY - Math.sin(perpAngle) * 3);
+            ctx.lineTo(midX + Math.cos(perpAngle) * 3, midY + Math.sin(perpAngle) * 3);
+            ctx.stroke();
+          });
+        }
+        
+        ctx.restore();
       }
 
       // Ship sprite upgrades: ship1 (0-1499), ship2 (1500-4999), ship3 (5000+)
@@ -1960,6 +2329,16 @@ export const GameCanvas = () => {
         ctx.translate(game.ship.x, game.ship.y);
         ctx.rotate(game.ship.angle + Math.PI / 2);
         
+        // Apply green health glow effect if active (check ref for immediate timing)
+        const now = Date.now();
+        if (now < healthGlowEndTimeRef.current) {
+          ctx.shadowBlur = 30;
+          ctx.shadowColor = "hsl(120, 100%, 50%)"; // Bright green glow
+        } else {
+          ctx.shadowBlur = 0;
+          ctx.shadowColor = "transparent";
+        }
+        
         const spriteSize = game.ship.radius * 2;
         ctx.drawImage(
           shipSprite,
@@ -1968,6 +2347,9 @@ export const GameCanvas = () => {
           spriteSize,
           spriteSize
         );
+        
+        // Reset shadow
+        ctx.shadowBlur = 0;
         ctx.restore();
       }
 
@@ -1987,7 +2369,9 @@ export const GameCanvas = () => {
     setGameState("playing");
     setScore(0);
     setHealth(3.0); // Reset to full health
-    setHasUpgraded(false); // Reset upgrade state
+    setShield(0.0); // Reset shield
+    setHasUpgraded(false); // Reset ship level 2 state
+    setHasUpgradedToShip3(false); // Reset ship level 3 state
     
     // Only reset difficulty to medium if no manual difficulty has been set
     const difficultyManager = difficultyManagerRef.current;
@@ -2005,11 +2389,14 @@ export const GameCanvas = () => {
     // Show captain dialog at game start
     setShowCaptainDialog(true);
     toastManager.clearQueue(); // Clear any pending toast notifications immediately when captain dialog appears
+    toastManager.updateThreshold(0); // Reset toast threshold for new game
     playCaptainSpeech(); // Play captain speech when dialog appears
     
     // Ensure audio starts when user interacts with the game
     try {
       await startThemeMusic();
+      // Start ship engine loops when game starts
+      AudioManager.getInstance().startShipEngineLoops();
     } catch (error) {
       console.log('Audio initialization failed:', error);
     }
@@ -2024,11 +2411,25 @@ export const GameCanvas = () => {
     game.stars = [];
     game.scraps = [];
     game.healthWrenches = [];
+    game.ammoPowerUps = [];
+    game.bullets = [];
     game.particles = [];
     game.difficulty = 1;
     game.invulnerable = 180;
     game.nearMissTracker.clear(); // Clear near-miss tracking for new game
     game.planetIdCounter = 0; // Reset planet ID counter
+    
+    // Reset shooting state
+    setAmmo(maxAmmo); // Start with full ammo (100 or 200 based on level)
+    setIsRecharging(false);
+    setIsUnlimitedAmmo(false);
+    
+    // Reset visual effects
+    healthGlowEndTimeRef.current = 0;
+    
+    // Reset combo tracking
+    game.comboCount = 0;
+    game.lastComboTime = 0;
   };
 
   return (
@@ -2044,7 +2445,7 @@ export const GameCanvas = () => {
       <div className={`flex flex-col items-center w-full h-full p-1 sm:p-2 md:p-4 ${isMobile ? 'justify-start pb-[15vh]' : 'justify-center'}`}>
         {/* UI Header - Responsive Layout */}
         {gameState === "playing" && (
-          <div className="w-full max-w-4xl mb-1 sm:mb-2 md:mb-4">
+          <div className="w-full max-w-6xl mb-1 sm:mb-2 md:mb-4">
             {isMobile ? (
               /* Mobile Layout - Stacked */
               <div className="space-y-2 sm:space-y-3">
@@ -2149,6 +2550,41 @@ export const GameCanvas = () => {
                         />
                       </div>
                     </div>
+                    
+                    {/* Ammo Bar */}
+                    <div className="flex items-center gap-1 sm:gap-2">
+                      <img 
+                        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" 
+                        alt="Weapon" 
+                        className={`w-4 sm:w-5 h-4 sm:h-5 drop-shadow-lg transition-opacity duration-300 ${(hasWeapon && (ammo > 0 || isUnlimitedAmmo)) ? 'opacity-100' : 'opacity-30'}`}
+                        style={{
+                          filter: (hasWeapon && (ammo > 0 || isUnlimitedAmmo))
+                            ? isUnlimitedAmmo
+                              ? 'drop-shadow(0 0 8px #fbbf24) brightness(1.3)'
+                              : 'drop-shadow(0 0 4px #60a5fa)'
+                            : 'drop-shadow(0 0 2px #64748b)',
+                          content: `url(${unlimitedAmmoImage})`
+                        }}
+                      />
+                      <div className={`relative w-16 sm:w-20 h-2 sm:h-2.5 bg-black/50 rounded-full border transition-all duration-300 ${hasWeapon ? (isUnlimitedAmmo ? 'border-yellow-500/50' : 'border-cyan-500/50') : 'border-gray-500/30'}`}>
+                        <div 
+                          className={`absolute top-0 left-0 h-full rounded-full transition-all duration-300 ${
+                            isUnlimitedAmmo ? 'bg-gradient-to-r from-yellow-400 to-amber-500' : 
+                            isRecharging ? 'bg-cyan-400' : 
+                            'bg-cyan-500'
+                          }`}
+                          style={{
+                            width: !hasWeapon ? '0%' : (isUnlimitedAmmo ? '100%' : `${Math.max(0, (ammo / maxAmmo) * 100)}%`),
+                            boxShadow: hasWeapon
+                              ? isUnlimitedAmmo 
+                                ? '0 0 10px #fbbf24'
+                                : '0 0 8px #60a5fa'
+                              : 'none',
+                            animation: isRecharging ? 'pulse 1s ease-in-out infinite' : 'none'
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
                   
                   {/* Pause Button */}
@@ -2156,6 +2592,7 @@ export const GameCanvas = () => {
                     onClick={() => {
                       console.log("🎮 PAUSE BUTTON CLICKED - About to call playMenuOpen()");
                       playMenuOpen().catch(console.error);
+                      AudioManager.getInstance().stopShipEngineLoops(); // Stop ship engine loops when paused
                       setGameState("paused");
                     }}
                     variant="outline"
@@ -2171,29 +2608,29 @@ export const GameCanvas = () => {
               /* Desktop Layout - Single Row */
               <div className="flex items-center justify-between px-2">
                 {/* Left side - Logo and Score */}
-                <div className="flex items-center gap-16">
+                <div className="flex items-center gap-6">
                   <img 
                     src={logoImage} 
                     alt="Game Logo" 
                     className="h-10 w-auto object-contain" 
                   />
-                  <div className="flex items-center gap-8">
+                  <div className="flex items-center gap-4">
                     {highScore > 0 && (
                       <div className="flex flex-col items-center">
-                        <div className="text-sm text-accent glow-blue opacity-80">
+                        <div className="text-xs text-accent glow-blue opacity-80">
                           High Score
                         </div>
-                        <div className="text-2xl font-bold text-accent glow-blue">
+                        <div className="text-xl font-bold text-accent glow-blue">
                           {highScore}
                         </div>
                       </div>
                     )}
                     <div className="flex flex-col items-center">
-                      <div className="text-sm text-blue-400 glow-blue opacity-80">
+                      <div className="text-xs text-blue-400 glow-blue opacity-80">
                         Score
                       </div>
-                      <div className="flex items-center gap-3">
-                        <div className={`text-4xl font-bold transition-colors duration-300 ${
+                      <div className="flex items-center gap-2">
+                        <div className={`text-3xl font-bold transition-colors duration-300 ${
                           score > highScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'
                         } text-glow`}>
                           {score}
@@ -2214,7 +2651,7 @@ export const GameCanvas = () => {
                   </div>
                 </div>
                 
-                {/* Right side - Health, Shield, and Menu */}
+                {/* Right side - Health, Shield, Ammo, and Menu */}
                 <div className="flex items-center gap-4">
                   <img src={redCrossSprite} alt="Health" className="w-6 h-6 drop-shadow-lg" style={{filter: 'drop-shadow(0 0 4px #00ffff)'}} />
                   <div className="relative w-32 h-3 bg-black/50 rounded-full border border-primary/30">
@@ -2249,6 +2686,39 @@ export const GameCanvas = () => {
                       style={{
                         width: `${Math.max(0, (shield / 3.0) * 100)}%`,
                         boxShadow: shield > 0 ? '0 0 10px #3b82f6' : 'none'
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Ammo Bar */}
+                  <img 
+                    src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" 
+                    alt="Weapon" 
+                    className={`w-6 h-6 drop-shadow-lg transition-opacity duration-300 ${(hasWeapon && (ammo > 0 || isUnlimitedAmmo)) ? 'opacity-100' : 'opacity-30'}`}
+                    style={{
+                      filter: (hasWeapon && (ammo > 0 || isUnlimitedAmmo))
+                        ? isUnlimitedAmmo
+                          ? 'drop-shadow(0 0 8px #fbbf24) brightness(1.3)'
+                          : 'drop-shadow(0 0 4px #60a5fa)'
+                        : 'drop-shadow(0 0 2px #64748b)',
+                      content: `url(${unlimitedAmmoImage})`
+                    }}
+                  />
+                  <div className={`relative w-32 h-3 bg-black/50 rounded-full border transition-all duration-300 ${hasWeapon ? (isUnlimitedAmmo ? 'border-yellow-500/50' : 'border-cyan-500/50') : 'border-gray-500/30'}`}>
+                    <div 
+                      className={`absolute top-0 left-0 h-full rounded-full transition-all duration-300 ${
+                        isUnlimitedAmmo ? 'bg-gradient-to-r from-yellow-400 to-amber-500' : 
+                        isRecharging ? 'bg-cyan-400' : 
+                        'bg-cyan-500'
+                      }`}
+                      style={{
+                        width: !hasWeapon ? '0%' : (isUnlimitedAmmo ? '100%' : `${Math.max(0, (ammo / maxAmmo) * 100)}%`),
+                        boxShadow: hasWeapon
+                          ? isUnlimitedAmmo 
+                            ? '0 0 12px #fbbf24'
+                            : '0 0 10px #60a5fa'
+                          : 'none',
+                        animation: isRecharging ? 'pulse 1s ease-in-out infinite' : 'none'
                       }}
                     />
                   </div>
@@ -2311,7 +2781,7 @@ export const GameCanvas = () => {
             </div>
             
             {/* Difficulty Selector */}
-            <div className="space-y-2">
+            <div className="space-y-2 pt-4">
               <div className="text-sm text-muted-foreground">Difficulty</div>
               <div className="flex gap-2 justify-center">
                 {(['easy', 'medium', 'hard'] as DifficultyLevel[]).map((difficulty) => (
@@ -2341,6 +2811,59 @@ export const GameCanvas = () => {
               </div>
             </div>
             
+            {/* Achievements - Show when any previous score exists */}
+            {highScore > 0 && (
+              <div className="space-y-2 pt-4 border-t border-blue-500/20">
+                <div className="text-sm text-muted-foreground">Achievements</div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 1500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                    <img 
+                      src={trophyImage} 
+                      alt="Trophy" 
+                      className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 1500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                    />
+                    <div className="flex-1">
+                      <div className="font-semibold">Ship Lvl 2</div>
+                      <div className="text-xs opacity-70">1,500+ pts</div>
+                    </div>
+                  </div>
+                  <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 5000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                    <img 
+                      src={trophyImage} 
+                      alt="Trophy" 
+                      className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 5000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                    />
+                    <div className="flex-1">
+                      <div className="font-semibold">Ship Lvl 3</div>
+                      <div className="text-xs opacity-70">5,000+ pts</div>
+                    </div>
+                  </div>
+                  <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                    <img 
+                      src={trophyImage} 
+                      alt="Trophy" 
+                      className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 25000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                    />
+                    <div className="flex-1">
+                      <div className="font-semibold">Ace Pilot</div>
+                      <div className="text-xs opacity-70">25,000+ pts</div>
+                    </div>
+                  </div>
+                  <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 75000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                    <img 
+                      src={trophyImage} 
+                      alt="Trophy" 
+                      className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 75000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                    />
+                    <div className="flex-1">
+                      <div className="font-semibold">Legend</div>
+                      <div className="text-xs opacity-70">75,000+ pts</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <Button onClick={startGame} size="lg" className="w-full bg-blue-500 text-white hover:bg-blue-600 glow-blue text-base sm:text-lg">
               START GAME
             </Button>
@@ -2358,6 +2881,7 @@ export const GameCanvas = () => {
             
             <Button onClick={() => {
               playMenuClose().catch(console.error);
+              AudioManager.getInstance().startShipEngineLoops(); // Restart ship engine loops when resuming
               setGameState("playing");
             }} className="bg-blue-500 text-white hover:bg-blue-600 w-full">
               RESUME
@@ -2398,7 +2922,7 @@ export const GameCanvas = () => {
               </Button>
               
               {/* Difficulty Selection */}
-              <div className="space-y-2">
+              <div className="space-y-2 pt-4">
                 <div className="text-sm text-muted-foreground">Difficulty</div>
                 <div className="flex gap-1">
                   {(['easy', 'medium', 'hard'] as const).map((difficulty) => (
@@ -2427,6 +2951,59 @@ export const GameCanvas = () => {
                   {currentDifficulty === 'hard' && 'More obstacles and faster, RIP'}
                 </div>
               </div>
+              
+              {/* Achievements - Show when any previous score exists */}
+              {highScore > 0 && (
+                <div className="space-y-2 pt-4 border-t border-blue-500/20">
+                  <div className="text-sm text-muted-foreground">Achievements</div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 1500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                      <img 
+                        src={trophyImage} 
+                        alt="Trophy" 
+                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 1500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                      />
+                      <div className="flex-1">
+                        <div className="font-semibold">Ship Lvl 2</div>
+                        <div className="text-xs opacity-70">1,500+ pts</div>
+                      </div>
+                    </div>
+                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 5000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                      <img 
+                        src={trophyImage} 
+                        alt="Trophy" 
+                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 5000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                      />
+                      <div className="flex-1">
+                        <div className="font-semibold">Ship Lvl 3</div>
+                        <div className="text-xs opacity-70">5,000+ pts</div>
+                      </div>
+                    </div>
+                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                      <img 
+                        src={trophyImage} 
+                        alt="Trophy" 
+                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 25000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                      />
+                      <div className="flex-1">
+                        <div className="font-semibold">Ace Pilot</div>
+                        <div className="text-xs opacity-70">25,000+ pts</div>
+                      </div>
+                    </div>
+                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 75000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                      <img 
+                        src={trophyImage} 
+                        alt="Trophy" 
+                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 75000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                      />
+                      <div className="flex-1">
+                        <div className="font-semibold">Legend</div>
+                        <div className="text-xs opacity-70">75,000+ pts</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2445,7 +3022,13 @@ export const GameCanvas = () => {
                   <div className="text-sm text-blue-400 glow-blue animate-pulse">NEW HIGH SCORE!</div>
                 )}
               </div>
-              <div className="text-lg sm:text-xl text-muted-foreground">Previous High Score: {previousHighScore > 0 ? previousHighScore : 'None'}</div>
+              <div className="text-lg sm:text-xl text-muted-foreground">
+                Previous High Score: <span className={`font-bold ${
+                  previousHighScore >= highScore && previousHighScore > 0
+                    ? 'text-yellow-400 glow-yellow'
+                    : 'text-blue-400 glow-blue'
+                }`}>{previousHighScore > 0 ? previousHighScore : 'None'}</span>
+              </div>
             </div>
             
             <div className="space-y-3">
@@ -2460,7 +3043,7 @@ export const GameCanvas = () => {
                 }} 
                 variant="outline" 
                 size="lg" 
-                className="w-full bg-card/50 border-blue-500/30 text-blue-400 hover:bg-blue-500/10 hover:text-blue-400"
+                className="w-full bg-card/50 border-blue-500/30 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400"
               >
                 MAIN MENU
               </Button>
@@ -2501,7 +3084,7 @@ export const GameCanvas = () => {
               </Button>
               
               {/* Difficulty Selection */}
-              <div className="space-y-2">
+              <div className="space-y-2 pt-4">
                 <div className="text-sm text-muted-foreground">Difficulty</div>
                 <div className="flex gap-1">
                   {(['easy', 'medium', 'hard'] as const).map((difficulty) => (
@@ -2530,6 +3113,59 @@ export const GameCanvas = () => {
                   {currentDifficulty === 'hard' && 'More obstacles and faster, RIP'}
                 </div>
               </div>
+              
+              {/* Achievements - Show when any previous score exists */}
+              {highScore > 0 && (
+                <div className="space-y-2 pt-4 border-t border-blue-500/20">
+                  <div className="text-sm text-muted-foreground">Achievements</div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 1500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                      <img 
+                        src={trophyImage} 
+                        alt="Trophy" 
+                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 1500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                      />
+                      <div className="flex-1">
+                        <div className="font-semibold">Ship Lvl 2</div>
+                        <div className="text-xs opacity-70">1,500+ pts</div>
+                      </div>
+                    </div>
+                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 5000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                      <img 
+                        src={trophyImage} 
+                        alt="Trophy" 
+                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 5000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                      />
+                      <div className="flex-1">
+                        <div className="font-semibold">Ship Lvl 3</div>
+                        <div className="text-xs opacity-70">5,000+ pts</div>
+                      </div>
+                    </div>
+                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                      <img 
+                        src={trophyImage} 
+                        alt="Trophy" 
+                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 25000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                      />
+                      <div className="flex-1">
+                        <div className="font-semibold">Ace Pilot</div>
+                        <div className="text-xs opacity-70">25,000+ pts</div>
+                      </div>
+                    </div>
+                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 75000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                      <img 
+                        src={trophyImage} 
+                        alt="Trophy" 
+                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 75000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                      />
+                      <div className="flex-1">
+                        <div className="font-semibold">Legend</div>
+                        <div className="text-xs opacity-70">75,000+ pts</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

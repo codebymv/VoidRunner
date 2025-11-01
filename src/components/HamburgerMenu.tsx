@@ -10,6 +10,7 @@ interface HamburgerMenuProps {
   onToggleMute: () => void;
   currentDifficulty: DifficultyLevel;
   onDifficultyChange: (difficulty: DifficultyLevel) => void;
+  onShowStats?: () => void;
 }
 
 export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ 
@@ -19,7 +20,8 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   isMuted,
   onToggleMute,
   currentDifficulty,
-  onDifficultyChange
+  onDifficultyChange,
+  onShowStats
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -103,6 +105,19 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
               <span>Mute (M)</span>
             </button>
 
+            {/* Stats Button */}
+            {onShowStats && (
+              <button
+                onClick={() => {
+                  onShowStats();
+                  setIsOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 text-sm rounded transition-colors text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400"
+              >
+                <span>📊 Stats</span>
+              </button>
+            )}
+
             {/* Difficulty Selector */}
             <div className="border-t border-blue-500/20 mt-2 pt-2">
               <div className="px-3 py-1 text-xs text-blue-400 font-medium">Difficulty</div>
@@ -122,16 +137,6 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 </button>
               ))}
             </div>
-            
-            {/* Future menu items can be added here */}
-            {/* Example:
-            <button className="w-full text-left px-3 py-2 text-sm text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400 rounded transition-colors">
-              Sound Effects
-            </button>
-            <button className="w-full text-left px-3 py-2 text-sm text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400 rounded transition-colors">
-              Music
-            </button>
-            */}
           </div>
         </div>
       )}

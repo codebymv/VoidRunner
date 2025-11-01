@@ -12,6 +12,14 @@ import menuCloseSound from '../assets/menu_close.mp3';
 import vulnerableBlinkSound from '../assets/vulnerable_blink.mp3';
 import speech1Sound from '../assets/speech1.mp3';
 import speech2Sound from '../assets/speech2.mp3';
+import shoot1Sound from '../assets/shoot1.mp3';
+import shoot2Sound from '../assets/shoot2.mp3';
+import chargeEmptySound from '../assets/charge_empty.mp3';
+import chargeReadySound from '../assets/charge_ready.mp3';
+import unlimitedAmmoSound from '../assets/unlimited_ammo.mp3';
+import explosionSound from '../assets/explosion.mp3';
+import shipIdleLoopSound from '../assets/ship_idle_loop.mp3';
+import shipThrustLoopSound from '../assets/ship_thrust_loop.mp3';
 
 export enum GameState {
   MENU = 'menu',
@@ -24,6 +32,7 @@ export class AudioManager {
   private static instance: AudioManager;
   private audioContext: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  private masterLowpassFilter: BiquadFilterNode | null = null; // Low-pass filter for master output
   private musicGain: GainNode | null = null;
   private soundEffectsGain: GainNode | null = null; // New sound effects bus
   private speechGain: GainNode | null = null; // Dedicated speech channel for maximum volume
@@ -44,11 +53,23 @@ export class AudioManager {
   private shieldPoolIndex: number = 0; // Current index in the shield sound pool
   private starAcquireCounter: number = 0; // Counter for alternating star acquire sounds
   
+  // Ship engine loops (crossfading idle/thrust states)
+  private shipIdleLoop: HTMLAudioElement | null = null;
+  private shipThrustLoop: HTMLAudioElement | null = null;
+  private shipIdleGain: GainNode | null = null;
+  private shipThrustGain: GainNode | null = null;
+  private currentShipState: 'idle' | 'thrust' = 'idle';
+  private readonly SHIP_ENGINE_FADE_TIME = 1.5; // 1.5s crossfade transition (very gentle fade)
+  private readonly IDLE_FADEOUT_DELAY = 2.5; // Idle hum fades out after 2.5 seconds
+  private idleStartTime: number = 0; // Track when ship became idle
+  private idleFadeoutScheduled: boolean = false; // Track if fadeout is scheduled
+  
   // Volume levels
-  private readonly MENU_VOLUME = 0.15; // 15% (increased from 6%)
-  private readonly GAMEPLAY_VOLUME = 0.18; // 18% (increased from 8.3%)
-  private readonly SOUND_EFFECT_VOLUME = 0.9; // 90% - Increased for much better speech audibility
+  private readonly MENU_VOLUME = 0.03; // 3% - Very subtle background music
+  private readonly GAMEPLAY_VOLUME = 0.04; // 4% - Lowered further for better gameplay audio balance
+  private readonly SOUND_EFFECT_VOLUME = 1.0; // 100% - Maximum volume for shooting sounds
   private readonly SPEECH_VOLUME = 0.23; // 23% - Reduced to fit better in the audio mix
+  private readonly SHIP_ENGINE_VOLUME = 0.15; // 15% - Background engine ambience
   
   // Mute state
   private isMuted: boolean = false;
@@ -76,12 +97,23 @@ export class AudioManager {
       this.musicGain = this.audioContext.createGain();
       this.soundEffectsGain = this.audioContext.createGain(); // Create sound effects bus
       this.speechGain = this.audioContext.createGain(); // Create dedicated speech channel
+      this.shipIdleGain = this.audioContext.createGain(); // Ship idle engine loop
+      this.shipThrustGain = this.audioContext.createGain(); // Ship thrust engine loop
       
-      // Connect gain nodes - music, sound effects, and speech all go through master
+      // Create low-pass filter for master output (cuts high frequencies above 12kHz)
+      this.masterLowpassFilter = this.audioContext.createBiquadFilter();
+      this.masterLowpassFilter.type = 'lowpass';
+      this.masterLowpassFilter.frequency.value = 12000; // 12kHz cutoff
+      this.masterLowpassFilter.Q.value = 0.7071; // Butterworth response (flat passband)
+      
+      // Connect gain nodes - music, sound effects, speech, and ship engines all go through master → lowpass → destination
       this.musicGain.connect(this.masterGain);
       this.soundEffectsGain.connect(this.masterGain);
       this.speechGain.connect(this.masterGain);
-      this.masterGain.connect(this.audioContext.destination);
+      this.shipIdleGain.connect(this.masterGain);
+      this.shipThrustGain.connect(this.masterGain);
+      this.masterGain.connect(this.masterLowpassFilter);
+      this.masterLowpassFilter.connect(this.audioContext.destination);
       
       // Initialize theme music
       this.themeAudio = new Audio(themeMusic);
@@ -127,10 +159,16 @@ export class AudioManager {
       starAcquire: starAcquireSound,
       starAcquire2: starAcquire2Sound,
       shipHit: shipHitSound,
-      menuOpen: menuOpenSound,
-      menuClose: menuCloseSound,
-      vulnerableBlink: vulnerableBlinkSound
-    };
+        menuOpen: menuOpenSound,
+        menuClose: menuCloseSound,
+        vulnerableBlink: vulnerableBlinkSound,
+        shoot1: shoot1Sound, // Blue bullets (level 2)
+        shoot2: shoot2Sound, // Purple bullets (level 3)
+        chargeEmpty: chargeEmptySound, // Ammo depleted
+        chargeReady: chargeReadySound, // Ammo recharged
+        unlimitedAmmo: unlimitedAmmoSound, // Unlimited ammo pickup
+        explosion: explosionSound // Obstacle destruction
+      };
 
     // Speech sounds - routed through dedicated speech channel
     const speechFiles = {
@@ -178,10 +216,33 @@ export class AudioManager {
       this.shieldSoundPool.push(shieldAudio);
     }
     
+    // Initialize ship engine loops (idle and thrust)
+    this.shipIdleLoop = new Audio(shipIdleLoopSound);
+    this.shipIdleLoop.preload = 'auto';
+    this.shipIdleLoop.loop = true; // Continuously loop
+    this.shipIdleLoop.volume = 1.0;
+    
+    this.shipThrustLoop = new Audio(shipThrustLoopSound);
+    this.shipThrustLoop.preload = 'auto';
+    this.shipThrustLoop.loop = true; // Continuously loop
+    this.shipThrustLoop.volume = 1.0;
+    
+    // Connect ship engine loops to their respective gain nodes
+    const idleSource = this.audioContext!.createMediaElementSource(this.shipIdleLoop);
+    idleSource.connect(this.shipIdleGain!);
+    
+    const thrustSource = this.audioContext!.createMediaElementSource(this.shipThrustLoop);
+    thrustSource.connect(this.shipThrustGain!);
+    
+    // Start with idle state (idle at full volume, thrust at zero)
+    this.shipIdleGain!.gain.value = this.SHIP_ENGINE_VOLUME;
+    this.shipThrustGain!.gain.value = 0;
+    
     // Set initial sound effects volume to match music level
     this.setSoundEffectsVolume(this.MENU_VOLUME);
     
     console.log('Sound effects initialized and routed through audio bus');
+    console.log('Ship engine loops initialized (idle/thrust crossfading system ready)');
   }
   
   public async playSound(soundName: string): Promise<void> {
@@ -261,6 +322,8 @@ export class AudioManager {
         audio.volume = 1.0; // Maximum volume (unchanged)
       } else if (soundName === 'shipHit') {
         audio.volume = 1.0; // Increased from 0.9 to maximum volume
+      } else if (soundName === 'healthWrench') {
+        audio.volume = 1.0; // Maximum volume for health restoration
       } else if (soundName === 'speech1' || soundName === 'speech2') {
         audio.volume = 1.0; // Maximum volume for speech sounds
       } else {
@@ -519,6 +582,129 @@ export class AudioManager {
     }
   }
   
+  // Ship engine loop control methods
+  /**
+   * Start playing the ship engine loops (called when game starts)
+   */
+  public startShipEngineLoops(): void {
+    if (!this.isAudioInitialized) {
+      console.log('⚠️ Audio not initialized, cannot start ship engine loops');
+      return;
+    }
+    
+    if (this.shipIdleLoop && this.shipThrustLoop && this.shipIdleGain && this.shipThrustGain) {
+      // Reset state
+      this.currentShipState = 'idle';
+      this.idleStartTime = Date.now();
+      this.idleFadeoutScheduled = false;
+      
+      // Reset gains to idle state (idle at full, thrust at zero)
+      this.shipIdleGain.gain.value = this.SHIP_ENGINE_VOLUME;
+      this.shipThrustGain.gain.value = 0;
+      
+      // Start both loops at the same time (they'll crossfade based on state)
+      this.shipIdleLoop.currentTime = 0;
+      this.shipThrustLoop.currentTime = 0;
+      
+      this.shipIdleLoop.play().catch(err => console.error('Failed to play idle loop:', err));
+      this.shipThrustLoop.play().catch(err => console.error('Failed to play thrust loop:', err));
+      
+      console.log('🚀 Ship engine loops started');
+    }
+  }
+  
+  /**
+   * Stop the ship engine loops (called when game ends or pauses)
+   */
+  public stopShipEngineLoops(): void {
+    if (this.shipIdleLoop) {
+      this.shipIdleLoop.pause();
+      this.shipIdleLoop.currentTime = 0;
+    }
+    
+    if (this.shipThrustLoop) {
+      this.shipThrustLoop.pause();
+      this.shipThrustLoop.currentTime = 0;
+    }
+    
+    console.log('🛑 Ship engine loops stopped');
+  }
+  
+  /**
+   * Set the ship engine state (idle or thrust) with smooth crossfading
+   * Idle loop fades out after staying idle for a few seconds
+   */
+  public setShipEngineState(state: 'idle' | 'thrust'): void {
+    if (!this.isAudioInitialized || !this.audioContext || !this.shipIdleGain || !this.shipThrustGain) {
+      return;
+    }
+    
+    // Only crossfade if state has changed
+    if (this.currentShipState === state) {
+      return;
+    }
+    
+    this.currentShipState = state;
+    const now = this.audioContext.currentTime;
+    const fadeTime = this.SHIP_ENGINE_FADE_TIME;
+    
+    if (state === 'idle') {
+      // Fade to idle: idle up, thrust down
+      this.shipIdleGain.gain.cancelScheduledValues(now);
+      this.shipThrustGain.gain.cancelScheduledValues(now);
+      
+      this.shipIdleGain.gain.setValueAtTime(this.shipIdleGain.gain.value, now);
+      this.shipThrustGain.gain.setValueAtTime(this.shipThrustGain.gain.value, now);
+      
+      // Fade idle in, thrust out
+      this.shipIdleGain.gain.exponentialRampToValueAtTime(this.SHIP_ENGINE_VOLUME, now + fadeTime);
+      this.shipThrustGain.gain.exponentialRampToValueAtTime(0.001, now + fadeTime);
+      
+      // Schedule idle fadeout after delay (for transition purposes only)
+      this.idleStartTime = Date.now();
+      this.idleFadeoutScheduled = false;
+      
+      // Schedule the fadeout to happen after the delay
+      setTimeout(() => {
+        // Only fade out if still idle and this fadeout hasn't been cancelled
+        if (this.currentShipState === 'idle' && !this.idleFadeoutScheduled && this.audioContext && this.shipIdleGain) {
+          const fadeoutNow = this.audioContext.currentTime;
+          this.shipIdleGain.gain.cancelScheduledValues(fadeoutNow);
+          this.shipIdleGain.gain.setValueAtTime(this.shipIdleGain.gain.value, fadeoutNow);
+          this.shipIdleGain.gain.exponentialRampToValueAtTime(0.001, fadeoutNow + fadeTime * 1.5); // Slower fadeout
+          this.idleFadeoutScheduled = true;
+          console.log('🌙 Idle engine fading out (been idle for ' + this.IDLE_FADEOUT_DELAY + 's)');
+        }
+      }, this.IDLE_FADEOUT_DELAY * 1000);
+      
+      console.log('🛸 Crossfading to IDLE engine');
+    } else {
+      // Fade to thrust: thrust up, idle down
+      // Cancel any pending idle fadeout
+      this.idleFadeoutScheduled = true; // Mark as cancelled
+      
+      this.shipIdleGain.gain.cancelScheduledValues(now);
+      this.shipThrustGain.gain.cancelScheduledValues(now);
+      
+      this.shipIdleGain.gain.setValueAtTime(this.shipIdleGain.gain.value, now);
+      this.shipThrustGain.gain.setValueAtTime(this.shipThrustGain.gain.value, now);
+      
+      // If idle was faded out, bring it back up first so the transition is smooth
+      if (this.shipIdleGain.gain.value < 0.01) {
+        // Idle is silent, fade it up briefly for smooth transition
+        this.shipIdleGain.gain.exponentialRampToValueAtTime(this.SHIP_ENGINE_VOLUME * 0.3, now + fadeTime * 0.3);
+        this.shipIdleGain.gain.exponentialRampToValueAtTime(0.001, now + fadeTime);
+      } else {
+        // Normal idle fadeout
+        this.shipIdleGain.gain.exponentialRampToValueAtTime(0.001, now + fadeTime);
+      }
+      
+      this.shipThrustGain.gain.exponentialRampToValueAtTime(this.SHIP_ENGINE_VOLUME, now + fadeTime);
+      
+      console.log('🔥 Crossfading to THRUST engine');
+    }
+  }
+  
   // Cleanup method
   public dispose(): void {
     this.stopThemeMusic();
@@ -537,6 +723,13 @@ export class AudioManager {
     });
     this.shieldSoundPool = [];
     this.shieldPoolIndex = 0;
+    
+    // Clean up ship engine loops
+    this.stopShipEngineLoops();
+    this.shipIdleLoop = null;
+    this.shipThrustLoop = null;
+    this.shipIdleGain = null;
+    this.shipThrustGain = null;
     
     // Clean up Web Audio API sources
     this.soundEffectSources.clear();
