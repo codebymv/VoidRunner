@@ -93,3 +93,4 @@ export const renderAmmoPowerUp = (
   powerUp.pulsePhase += 1;
 };
 
+

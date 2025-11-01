@@ -32,6 +32,24 @@ export const CaptainDialog: React.FC<CaptainDialogProps> = ({ isVisible, onCompl
     };
   };
 
+  // Render text with bold formatting for [BRACKET] content
+  const renderFormattedText = (text: string) => {
+    // Split by square brackets and render with bold formatting
+    const parts = text.split(/(\[[^\]]+\])/g);
+    
+    return parts.map((part, index) => {
+      // Check if this part is in square brackets
+      if (part.match(/^\[.*\]$/)) {
+        return (
+          <span key={index} className="font-extrabold text-blue-300">
+            {part}
+          </span>
+        );
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
+
   const { gestures, words } = parseMessage(dialogMessage);
 
   useEffect(() => {
@@ -137,7 +155,7 @@ export const CaptainDialog: React.FC<CaptainDialogProps> = ({ isVisible, onCompl
             {words && (
               <div className="text-white text-sm leading-relaxed break-words">
                 <span className="font-semibold underline decoration-blue-400/50 decoration-2 underline-offset-2">
-                  {words}
+                  {renderFormattedText(words)}
                 </span>
               </div>
             )}

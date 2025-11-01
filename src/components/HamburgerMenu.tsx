@@ -11,6 +11,7 @@ interface HamburgerMenuProps {
   currentDifficulty: DifficultyLevel;
   onDifficultyChange: (difficulty: DifficultyLevel) => void;
   onShowStats?: () => void;
+  highScore: number; // For checking hard difficulty unlock
 }
 
 export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ 
@@ -21,7 +22,8 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onToggleMute,
   currentDifficulty,
   onDifficultyChange,
-  onShowStats
+  onShowStats,
+  highScore
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -121,21 +123,27 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             {/* Difficulty Selector */}
             <div className="border-t border-blue-500/20 mt-2 pt-2">
               <div className="px-3 py-1 text-xs text-blue-400 font-medium">Difficulty</div>
-              {(['easy', 'medium', 'hard'] as DifficultyLevel[]).map((difficulty) => (
+              {(['easy', 'medium', 'hard'] as DifficultyLevel[]).map((difficulty) => {
+                const isHardLocked = difficulty === 'hard' && highScore < 7000;
+                return (
                 <button
                   key={difficulty}
-                  onClick={() => handleDifficultyChange(difficulty)}
+                  onClick={() => !isHardLocked && handleDifficultyChange(difficulty)}
+                  disabled={isHardLocked}
                   className={`w-full text-left px-3 py-2 text-sm rounded transition-colors ${
-                    currentDifficulty === difficulty
+                    isHardLocked
+                      ? 'text-muted-foreground/30 cursor-not-allowed opacity-50'
+                      : currentDifficulty === difficulty
                       ? difficulty === 'easy' ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                       : difficulty === 'medium' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                       : 'bg-red-500/20 text-red-400 border border-red-500/30'
                       : 'text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400'
                   }`}
                 >
-                  <span>{difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}</span>
+                  <span>{difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}{isHardLocked && ' 🔒'}</span>
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

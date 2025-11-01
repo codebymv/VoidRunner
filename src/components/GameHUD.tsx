@@ -86,6 +86,7 @@ export const GameHUD = ({
                 currentDifficulty={currentDifficulty}
                 onDifficultyChange={onDifficultyChange}
                 onShowStats={onShowStats}
+                highScore={highScore}
               />
             </div>
           </div>
@@ -167,4 +168,5 @@ export const GameHUD = ({
     </div>
   );
 };
+
 

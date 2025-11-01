@@ -325,7 +325,7 @@ export class AudioManager {
       } else if (soundName === 'healthWrench') {
         audio.volume = 1.0; // Maximum volume for health restoration
       } else if (soundName === 'speech1' || soundName === 'speech2') {
-        audio.volume = 1.0; // Maximum volume for speech sounds
+        audio.volume = 0.80; // Slightly lower volume for captain speech
       } else {
         audio.volume = 0.95; // Increased from 0.8 to 0.95 for other sounds
       }

@@ -155,6 +155,15 @@ export const GameCanvas = () => {
   const difficultyManagerRef = useRef<DifficultyManager>(new DifficultyManager('medium'));
   const [currentDifficulty, setCurrentDifficulty] = useState<DifficultyLevel>('medium');
   
+  // Auto-switch from hard difficulty if not unlocked
+  useEffect(() => {
+    if (currentDifficulty === 'hard' && highScore < 7000) {
+      const difficultyManager = difficultyManagerRef.current;
+      difficultyManager.setDifficulty('medium', true);
+      setCurrentDifficulty('medium');
+    }
+  }, [currentDifficulty, highScore]);
+  
   // Captain's commentary quotes for game over
   const captainGameOverQuotes = [
     "... (hits cigar) That guy was epic.",
@@ -165,8 +174,8 @@ export const GameCanvas = () => {
   
   // Captain's level-up quotes for dialog system
   const captainLevelUpQuotes = {
-    level2: "They're gonna tell stories about ya, kid",
-    level3: "You're in charge, cap'n"
+    level2: "They're gonna tell stories about ya, kid, hold [SPACE] to fire away",
+    level3: "Here's some more firepower, cap'n"
   };
   
   // Function to play random captain speech
@@ -187,6 +196,13 @@ export const GameCanvas = () => {
     setShowLevelUpDialog(true);
     playCaptainSpeech(); // Play random captain speech
   }, [captainLevelUpQuotes, playCaptainSpeech]);
+  
+  // Clear shield if health drops below 100%
+  useEffect(() => {
+    if (health < 3.0 && shield > 0) {
+      setShield(0);
+    }
+  }, [health, shield]);
   
   // Mobile touch event prevention - only on canvas during gameplay
   useEffect(() => {
@@ -254,7 +270,7 @@ export const GameCanvas = () => {
   
   // Helper function to get star acquisition amount based on ship level
   const getStarValue = (currentScore: number) => {
-    if (currentScore >= 5000) {
+    if (currentScore >= 7000) {
       return 1000; // Ship level 3
     } else if (currentScore >= 1500) {
       return 100; // Ship level 2
@@ -308,7 +324,8 @@ export const GameCanvas = () => {
     // Play ship hit sound whenever damage is taken
     playSound('shipHit').catch(console.error);
     
-    if (shield > 0) {
+    // Shield only works when health is at 100% (3.0)
+    if (shield > 0 && health >= 3.0) {
       // Shield taking damage - no sound here, sound plays when becoming vulnerable
       // Damage shield first
       setShield(prev => {
@@ -349,9 +366,16 @@ export const GameCanvas = () => {
         return remainingShield;
       });
     } else {
-      // No shield, damage health directly
+      // No shield or health below 100%, damage health directly
+      // If health drops below 100%, clear any remaining shield
       setHealth(prev => {
         const newHealth = prev - damageAmount;
+        
+        // Clear shield if health drops below max
+        if (newHealth < 3.0 && shield > 0) {
+          setShield(0);
+        }
+        
         if (newHealth <= 0) {
               // Delay captain's commentary by 1700ms when player dies
               setTimeout(() => {
@@ -833,9 +857,9 @@ export const GameCanvas = () => {
         const shootNow = Date.now();
         if (shootNow - lastShotTimeRef.current > FIRE_RATE) {
           if (isUnlimitedAmmo || ammo > 0) {
-            // Create bullet - ONLY purple at level 3 (score >= 5000)
-            // Level 2 (score 1500-4999) = blue bullets (hasUpgradedToShip3 = false)
-            // Level 3 (score 5000+) = purple bullets (hasUpgradedToShip3 = true)
+            // Create bullet - ONLY purple at level 3 (score >= 7000)
+            // Level 2 (score 1500-6999) = blue bullets (hasUpgradedToShip3 = false)
+            // Level 3 (score 7000+) = purple bullets (hasUpgradedToShip3 = true)
             const bullet = createBullet(game.ship, hasUpgradedToShip3);
             game.bullets.push(bullet);
             
@@ -897,7 +921,7 @@ export const GameCanvas = () => {
         }
       }
 
-      // Handle ammo recharge
+      // Handle ammo recharge (full recharge after hitting 0)
       if (isRecharging) {
         const rechNow = Date.now();
         const rechargeProgress = (rechNow - rechargeStartTimeRef.current) / RECHARGE_TIME;
@@ -908,6 +932,12 @@ export const GameCanvas = () => {
         } else {
           setAmmo(Math.floor(rechargeProgress * maxAmmo));
         }
+      }
+      // Passive ammo regeneration (when not empty and not unlimited)
+      else if (!isUnlimitedAmmo && ammo < maxAmmo && ammo > 0) {
+        // Regenerate 1 ammo per frame (60 FPS = ~1.67 ammo per second, takes ~60 seconds for full recharge)
+        // Adjust the rate: 0.5 = slower, 2 = faster
+        setAmmo(prev => Math.min(maxAmmo, prev + 0.5));
       }
 
       // Handle unlimited ammo expiration
@@ -1533,6 +1563,17 @@ export const GameCanvas = () => {
             const damage = calculateDamage(planet.type, bullet.isPurple);
             planet.health = (planet.health || planet.maxHealth || 100) - damage;
             
+            // Apply knockback force in bullet direction
+            // Knockback is proportional to damage and inversely proportional to mass
+            const bulletSpeed = Math.sqrt(bullet.vx * bullet.vx + bullet.vy * bullet.vy);
+            if (bulletSpeed > 0) {
+              const bulletDirX = bullet.vx / bulletSpeed;
+              const bulletDirY = bullet.vy / bulletSpeed;
+              const knockbackStrength = (damage * 0.35) / Math.sqrt(planet.mass); // Stronger knockback for more noticeable effect
+              planet.vx += bulletDirX * knockbackStrength;
+              planet.vy += bulletDirY * knockbackStrength;
+            }
+            
             // Flash white briefly to indicate damage
             planet.flashUntil = Date.now() + 80; // 80ms flash duration
             
@@ -1679,7 +1720,7 @@ export const GameCanvas = () => {
             // Scrap collection for points (safe distance)
             awardPoints("Scrap collected!", 25, 1500);
             
-            createParticles(scrap.x, scrap.y, "hsl(120, 100%, 50%)", 12); // Green collection particles
+            createParticles(scrap.x, scrap.y, "hsl(0, 0%, 100%)", 12); // White collection particles
             playSound('starAcquire');
             
             // Remove the scrap after collection
@@ -1750,18 +1791,35 @@ export const GameCanvas = () => {
             // Trigger green health glow effect for 1 second (use ref for immediate feedback)
             healthGlowEndTimeRef.current = Date.now() + 1000;
             
-            // If health is full, add to shield instead
-            if (health >= 3.0) {
-              setShield(prev => Math.min(3.0, prev + 0.75)); // Add 25% shield
+            // Restore 25% health (0.75 health points), overflow goes to shield
+            const healAmount = 0.75;
+            const currentHealth = health;
+            
+            if (currentHealth >= 3.0) {
+              // Health already full, add all to shield
+              setShield(prev => Math.min(3.0, prev + healAmount));
               // Create blue shield particles
               createParticles(wrench.x, wrench.y, "hsl(220, 100%, 60%)", 20);
               createParticles(wrench.x, wrench.y, "hsl(200, 100%, 70%)", 15);
             } else {
-              // Restore 25% health (0.75 health points)
-              setHealth(prev => Math.min(3.0, prev + 0.75));
-              // Create green healing particles
-              createParticles(wrench.x, wrench.y, "hsl(120, 100%, 50%)", 20);
-              createParticles(wrench.x, wrench.y, "hsl(140, 100%, 70%)", 15);
+              // Calculate overflow
+              const healthToAdd = Math.min(healAmount, 3.0 - currentHealth);
+              const overflow = healAmount - healthToAdd;
+              
+              // Add to health first
+              setHealth(prev => prev + healthToAdd);
+              
+              // If there's overflow, add to shield
+              if (overflow > 0) {
+                setShield(prev => Math.min(3.0, prev + overflow));
+                // Create both green (health) and blue (shield) particles
+                createParticles(wrench.x, wrench.y, "hsl(120, 100%, 50%)", 15);
+                createParticles(wrench.x, wrench.y, "hsl(220, 100%, 60%)", 15);
+              } else {
+                // Create green healing particles only
+                createParticles(wrench.x, wrench.y, "hsl(120, 100%, 50%)", 20);
+                createParticles(wrench.x, wrench.y, "hsl(140, 100%, 70%)", 15);
+              }
             }
           }
         }
@@ -2129,7 +2187,7 @@ export const GameCanvas = () => {
         // Determine glow color and star sprite based on current score (ship level)
          let starImage: HTMLImageElement;
          let glowColor: string;
-         if (score >= 5000) {
+         if (score >= 7000) {
            // Ship level 3 - stars worth 1000 points - Purple glow
            starImage = starUpgrade2Img.current;
            glowColor = "hsl(280, 100%, 50%)";
@@ -2291,22 +2349,26 @@ export const GameCanvas = () => {
         ctx.restore();
       }
 
-      // Ship sprite upgrades: ship1 (0-1499), ship2 (1500-4999), ship3 (5000+)
+      // Ship sprite upgrades: ship1 (0-1499), ship2 (1500-6999), ship3 (7000+)
       const isUpgradedToShip2 = score >= 1500;
-      const isUpgradedToShip3 = score >= 5000;
+      const isUpgradedToShip3 = score >= 7000;
       
-      // Check if ship just upgraded to ship2 and restore health
+      // Check if ship just upgraded to ship2 and restore health + ammo
       if (isUpgradedToShip2 && !hasUpgraded) {
         setHasUpgraded(true);
         setHealth(3.0); // Restore to full health on upgrade
+        setAmmo(100); // Fill ammo to 100 for level 2
+        setIsRecharging(false); // Ensure weapon is ready
         playSound('shipUpgrades');
         triggerCaptainLevelUpDialog('level2'); // Trigger captain dialog for level 2
       }
       
-      // Check if ship just upgraded to ship3 and restore health
+      // Check if ship just upgraded to ship3 and restore health + ammo
       if (isUpgradedToShip3 && !hasUpgradedToShip3) {
         setHasUpgradedToShip3(true);
         setHealth(3.0); // Restore to full health on upgrade
+        setAmmo(200); // Fill ammo to 200 for level 3 (double capacity)
+        setIsRecharging(false); // Ensure weapon is ready
         playSound('shipUpgrades');
         triggerCaptainLevelUpDialog('level3'); // Trigger captain dialog for level 3
       }
@@ -2501,6 +2563,7 @@ export const GameCanvas = () => {
                       onToggleMute={toggleMute}
                       currentDifficulty={currentDifficulty}
                       onDifficultyChange={handleDifficultyChange}
+                      highScore={highScore}
                     />
                   </div>
                 </div>
@@ -2732,6 +2795,7 @@ export const GameCanvas = () => {
                     onToggleMute={toggleMute}
                     currentDifficulty={currentDifficulty}
                     onDifficultyChange={handleDifficultyChange}
+                    highScore={highScore}
                   />
                 </div>
               </div>
@@ -2784,25 +2848,32 @@ export const GameCanvas = () => {
             <div className="space-y-2 pt-4">
               <div className="text-sm text-muted-foreground">Difficulty</div>
               <div className="flex gap-2 justify-center">
-                {(['easy', 'medium', 'hard'] as DifficultyLevel[]).map((difficulty) => (
+                {(['easy', 'medium', 'hard'] as DifficultyLevel[]).map((difficulty) => {
+                  const isHardLocked = difficulty === 'hard' && highScore < 7000;
+                  return (
                   <button
                     key={difficulty}
                     onClick={() => {
+                      if (isHardLocked) return; // Prevent click if locked
                       const difficultyManager = difficultyManagerRef.current;
                       difficultyManager.setDifficulty(difficulty, true);
                       setCurrentDifficulty(difficulty);
                     }}
+                    disabled={isHardLocked}
                     className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                      currentDifficulty === difficulty
+                      isHardLocked 
+                        ? 'bg-muted/10 text-muted-foreground/30 border border-muted/20 cursor-not-allowed opacity-50'
+                        : currentDifficulty === difficulty
                         ? difficulty === 'easy' ? 'bg-green-500/20 text-green-400 border border-green-500/50'
                         : difficulty === 'medium' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
                         : 'bg-red-500/20 text-red-400 border border-red-500/50'
                         : 'bg-muted/30 text-muted-foreground border border-muted/50 hover:bg-blue-500/10 hover:text-blue-400'
                     }`}
                   >
-                    {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+                    {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}{isHardLocked && ' 🔒'}
                   </button>
-                ))}
+                  );
+                })}
               </div>
               <div className="text-xs text-muted-foreground">
                 {currentDifficulty === 'easy' && 'Fewer obstacles, more forgiving'}
@@ -2823,19 +2894,19 @@ export const GameCanvas = () => {
                       className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 1500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
                     />
                     <div className="flex-1">
-                      <div className="font-semibold">Ship Lvl 2</div>
+                      <div className="font-semibold">Rookie</div>
                       <div className="text-xs opacity-70">1,500+ pts</div>
                     </div>
                   </div>
-                  <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 5000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                  <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 7000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
                     <img 
                       src={trophyImage} 
                       alt="Trophy" 
-                      className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 5000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                      className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 7000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
                     />
                     <div className="flex-1">
-                      <div className="font-semibold">Ship Lvl 3</div>
-                      <div className="text-xs opacity-70">5,000+ pts</div>
+                      <div className="font-semibold">Ace Pilot</div>
+                      <div className="text-xs opacity-70">7,000+ pts</div>
                     </div>
                   </div>
                   <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
@@ -2845,7 +2916,7 @@ export const GameCanvas = () => {
                       className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 25000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
                     />
                     <div className="flex-1">
-                      <div className="font-semibold">Ace Pilot</div>
+                      <div className="font-semibold">Legend</div>
                       <div className="text-xs opacity-70">25,000+ pts</div>
                     </div>
                   </div>
@@ -2856,7 +2927,7 @@ export const GameCanvas = () => {
                       className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 75000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
                     />
                     <div className="flex-1">
-                      <div className="font-semibold">Legend</div>
+                      <div className="font-semibold">Psychonaut</div>
                       <div className="text-xs opacity-70">75,000+ pts</div>
                     </div>
                   </div>
@@ -2925,25 +2996,32 @@ export const GameCanvas = () => {
               <div className="space-y-2 pt-4">
                 <div className="text-sm text-muted-foreground">Difficulty</div>
                 <div className="flex gap-1">
-                  {(['easy', 'medium', 'hard'] as const).map((difficulty) => (
+                  {(['easy', 'medium', 'hard'] as const).map((difficulty) => {
+                    const isHardLocked = difficulty === 'hard' && highScore < 7000;
+                    return (
                     <button
                       key={difficulty}
                       onClick={() => {
+                        if (isHardLocked) return;
                         const difficultyManager = difficultyManagerRef.current;
                         difficultyManager.setDifficulty(difficulty, true);
                         setCurrentDifficulty(difficulty);
                       }}
+                      disabled={isHardLocked}
                       className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors flex-1 ${
-                        currentDifficulty === difficulty
+                        isHardLocked 
+                          ? 'bg-muted/10 text-muted-foreground/30 border border-muted/20 cursor-not-allowed opacity-50'
+                          : currentDifficulty === difficulty
                           ? difficulty === 'easy' ? 'bg-green-500/20 text-green-400 border border-green-500/50'
                           : difficulty === 'medium' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
                           : 'bg-red-500/20 text-red-400 border border-red-500/50'
                           : 'bg-muted/30 text-muted-foreground border border-muted/50 hover:bg-blue-500/10 hover:text-blue-400'
                       }`}
                     >
-                      {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+                      {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}{isHardLocked && ' 🔒'}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
                 <div className="text-xs text-muted-foreground text-center">
                   {currentDifficulty === 'easy' && 'Fewer obstacles, more forgiving'}
@@ -2975,8 +3053,8 @@ export const GameCanvas = () => {
                         className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 5000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
                       />
                       <div className="flex-1">
-                        <div className="font-semibold">Ship Lvl 3</div>
-                        <div className="text-xs opacity-70">5,000+ pts</div>
+                        <div className="font-semibold">Ace Pilot</div>
+                        <div className="text-xs opacity-70">7,000+ pts</div>
                       </div>
                     </div>
                     <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
@@ -3087,25 +3165,32 @@ export const GameCanvas = () => {
               <div className="space-y-2 pt-4">
                 <div className="text-sm text-muted-foreground">Difficulty</div>
                 <div className="flex gap-1">
-                  {(['easy', 'medium', 'hard'] as const).map((difficulty) => (
+                  {(['easy', 'medium', 'hard'] as const).map((difficulty) => {
+                    const isHardLocked = difficulty === 'hard' && highScore < 7000;
+                    return (
                     <button
                       key={difficulty}
                       onClick={() => {
+                        if (isHardLocked) return;
                         const difficultyManager = difficultyManagerRef.current;
                         difficultyManager.setDifficulty(difficulty, true);
                         setCurrentDifficulty(difficulty);
                       }}
+                      disabled={isHardLocked}
                       className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors flex-1 ${
-                        currentDifficulty === difficulty
+                        isHardLocked 
+                          ? 'bg-muted/10 text-muted-foreground/30 border border-muted/20 cursor-not-allowed opacity-50'
+                          : currentDifficulty === difficulty
                           ? difficulty === 'easy' ? 'bg-green-500/20 text-green-400 border border-green-500/50'
                           : difficulty === 'medium' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
                           : 'bg-red-500/20 text-red-400 border border-red-500/50'
                           : 'bg-muted/30 text-muted-foreground border border-muted/50 hover:bg-blue-500/10 hover:text-blue-400'
                       }`}
                     >
-                      {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+                      {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}{isHardLocked && ' 🔒'}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
                 <div className="text-xs text-muted-foreground text-center">
                   {currentDifficulty === 'easy' && 'Fewer obstacles, more forgiving'}
@@ -3137,8 +3222,8 @@ export const GameCanvas = () => {
                         className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 5000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
                       />
                       <div className="flex-1">
-                        <div className="font-semibold">Ship Lvl 3</div>
-                        <div className="text-xs opacity-70">5,000+ pts</div>
+                        <div className="font-semibold">Ace Pilot</div>
+                        <div className="text-xs opacity-70">7,000+ pts</div>
                       </div>
                     </div>
                     <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>

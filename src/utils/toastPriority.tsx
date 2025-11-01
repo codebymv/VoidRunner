@@ -68,6 +68,7 @@ export function formatToastWithCombo(
 class ToastPriorityManager {
   private pendingToasts: PriorityToast[] = [];
   private currentToast: PriorityToast | null = null;
+  private currentToastId: string | number | null = null; // Store current toast ID
   private toastTimeout: NodeJS.Timeout | null = null;
   private readonly maxQueueSize = 5; // Limit queue size to prevent memory issues
   private minPointsToShow = 15; // Dynamic threshold - increases as game progresses
@@ -168,8 +169,12 @@ class ToastPriorityManager {
     
     // Defer toast dismissal to avoid React warnings about updating during render
     setTimeout(() => {
-      toast.dismiss(); // Dismiss current toast
+      // Only dismiss the specific toast ID, not all toasts
+      if (this.currentToastId) {
+        toast.dismiss(this.currentToastId);
+      }
       this.currentToast = null;
+      this.currentToastId = null;
       this.showNextToast();
     }, 0);
   }
@@ -177,11 +182,16 @@ class ToastPriorityManager {
   private showNextToast(): void {
     if (this.pendingToasts.length === 0) {
       this.currentToast = null;
+      this.currentToastId = null;
       return;
     }
 
     const nextToast = this.pendingToasts.shift()!;
     this.currentToast = nextToast;
+    
+    // Generate unique ID for this toast
+    const toastId = `toast-${nextToast.timestamp}-${nextToast.points}`;
+    this.currentToastId = toastId;
 
     // Show the toast - defer to ensure we're not in a render cycle
     setTimeout(() => {
@@ -193,7 +203,7 @@ class ToastPriorityManager {
       
       toast(nextToast.message, {
         ...toastOptions,
-        id: `toast-${nextToast.timestamp}-${nextToast.points}`, // Unique ID to prevent duplicates
+        id: toastId, // Use the stored ID
       });
 
       // Set timeout to show next toast
@@ -203,6 +213,7 @@ class ToastPriorityManager {
           nextToast.onDismiss();
         }
         this.currentToast = null;
+        this.currentToastId = null;
         this.showNextToast();
       }, nextToast.duration);
     }, 0);
@@ -215,8 +226,14 @@ class ToastPriorityManager {
       clearTimeout(this.toastTimeout);
       this.toastTimeout = null;
     }
+    
+    // Only dismiss the current score toast, not all toasts (preserves achievement toasts)
+    if (this.currentToastId) {
+      toast.dismiss(this.currentToastId);
+    }
+    
     this.currentToast = null;
-    toast.dismiss();
+    this.currentToastId = null;
   }
 
   // Update minimum points threshold based on game score
