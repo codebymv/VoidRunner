@@ -40,7 +40,7 @@ All colors MUST be HSL.
     
     --glow-cyan: 180 100% 50%;
     --glow-magenta: 320 100% 50%;
-    --glow-yellow: 60 100% 50%;
+    --glow-blue: 220 100% 50%;
   }
 }
 
@@ -63,8 +63,8 @@ All colors MUST be HSL.
     filter: drop-shadow(0 0 8px hsl(var(--glow-magenta) / 0.8));
   }
   
-  .glow-yellow {
-    filter: drop-shadow(0 0 8px hsl(var(--glow-yellow) / 0.8));
+  .glow-blue {
+    filter: drop-shadow(0 0 8px hsl(var(--glow-blue) / 0.8));
   }
   
   .text-glow {

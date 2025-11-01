@@ -1,10 +1,13 @@
 import { toast } from "sonner";
+import React from "react";
 
 interface PriorityToast {
-  message: string;
+  message: string | React.ReactNode;
   points: number;
   duration: number;
   className: string;
+  position?: string;
+  onDismiss?: () => void;
   timestamp: number;
 }
 
@@ -24,12 +27,14 @@ class ToastPriorityManager {
     return 5; // Low scoring events (debris bounces, etc.)
   }
 
-  public showToast(message: string, points: number, duration: number, className: string): void {
+  public showToast(message: string | React.ReactNode, points: number, duration: number, className: string, position?: string, onDismiss?: () => void): void {
     const newToast: PriorityToast = {
       message,
       points,
       duration,
       className,
+      position,
+      onDismiss,
       timestamp: Date.now()
     };
 
@@ -92,6 +97,12 @@ class ToastPriorityManager {
       clearTimeout(this.toastTimeout);
       this.toastTimeout = null;
     }
+    
+    // Call onDismiss callback if current toast has one
+    if (this.currentToast && this.currentToast.onDismiss) {
+      this.currentToast.onDismiss();
+    }
+    
     toast.dismiss(); // Dismiss current toast
     this.currentToast = null;
     this.showNextToast();
@@ -107,13 +118,23 @@ class ToastPriorityManager {
     this.currentToast = nextToast;
 
     // Show the toast
-    toast(nextToast.message, {
+    const toastOptions: any = {
       duration: nextToast.duration,
       className: nextToast.className
-    });
+    };
+    
+    if (nextToast.position) {
+      toastOptions.position = nextToast.position;
+    }
+    
+    toast(nextToast.message, toastOptions);
 
     // Set timeout to show next toast
     this.toastTimeout = setTimeout(() => {
+      // Call onDismiss callback if provided
+      if (nextToast.onDismiss) {
+        nextToast.onDismiss();
+      }
       this.currentToast = null;
       this.showNextToast();
     }, nextToast.duration);
@@ -131,7 +152,7 @@ class ToastPriorityManager {
   }
 
   // Get queue status for debugging
-  public getQueueStatus(): { pending: number, current: string | null, priorities: number[] } {
+  public getQueueStatus(): { pending: number, current: string | React.ReactNode | null, priorities: number[] } {
     return {
       pending: this.pendingToasts.length,
       current: this.currentToast?.message || null,
@@ -144,6 +165,6 @@ class ToastPriorityManager {
 export const toastManager = new ToastPriorityManager();
 
 // Convenience function that matches the original toast API
-export function priorityToast(message: string, points: number, options: { duration: number, className: string }) {
-  toastManager.showToast(message, points, options.duration, options.className);
+export function priorityToast(message: string | React.ReactNode, points: number, options: { duration: number, className: string, position?: string, onDismiss?: () => void }) {
+  toastManager.showToast(message, points, options.duration, options.className, options.position, options.onDismiss);
 }

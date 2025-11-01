@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from './ui/button';
+import { type DifficultyLevel } from '../utils/difficultyConfig';
 
 interface HamburgerMenuProps {
   showJoystick: boolean;
@@ -7,6 +8,8 @@ interface HamburgerMenuProps {
   isMobile: boolean;
   isMuted: boolean;
   onToggleMute: () => void;
+  currentDifficulty: DifficultyLevel;
+  onDifficultyChange: (difficulty: DifficultyLevel) => void;
 }
 
 export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ 
@@ -14,7 +17,9 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onToggleJoystick, 
   isMobile,
   isMuted,
-  onToggleMute
+  onToggleMute,
+  currentDifficulty,
+  onDifficultyChange
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -46,6 +51,11 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
     setIsOpen(false); // Close menu after selection
   };
 
+  const handleDifficultyChange = (difficulty: DifficultyLevel) => {
+    onDifficultyChange(difficulty);
+    setIsOpen(false); // Close menu after selection
+  };
+
   return (
     <div className="relative" ref={menuRef}>
       {/* Hamburger Button */}
@@ -53,7 +63,7 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
         onClick={() => setIsOpen(!isOpen)}
         variant="outline"
         size="sm"
-        className="bg-black/50 border-primary/30 text-primary hover:bg-primary/20 transition-colors p-2"
+        className="bg-black/50 border-blue-500/30 text-blue-400 hover:bg-blue-500/20 transition-colors p-2"
         style={{ minHeight: '36px', minWidth: '36px' }}
       >
         <div className="flex flex-col gap-1">
@@ -65,7 +75,7 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute top-full right-0 mt-2 bg-card/95 backdrop-blur-xl border border-primary/30 rounded-lg shadow-lg z-[100] min-w-48">
+        <div className="absolute top-full right-0 mt-2 bg-card/95 backdrop-blur-xl border border-blue-500/30 rounded-lg shadow-lg z-[100] min-w-48">
           <div className="p-2">
             {/* Joystick Toggle Option - Only show on desktop */}
             {!isMobile && (
@@ -73,8 +83,8 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 onClick={handleJoystickToggle}
                 className={`w-full text-left px-3 py-2 text-sm rounded transition-colors ${
                   showJoystick 
-                    ? 'bg-primary/20 text-primary' 
-                    : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
+                    : 'text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400'
                 }`}
               >
                 <span>Joystick (J)</span>
@@ -86,19 +96,39 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
               onClick={handleMuteToggle}
               className={`w-full text-left px-3 py-2 text-sm rounded transition-colors ${
                 isMuted 
-                  ? 'bg-primary/20 text-primary' 
-                  : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
+                  : 'text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400'
               }`}
             >
               <span>Mute (M)</span>
             </button>
+
+            {/* Difficulty Selector */}
+            <div className="border-t border-blue-500/20 mt-2 pt-2">
+              <div className="px-3 py-1 text-xs text-blue-400 font-medium">Difficulty</div>
+              {(['easy', 'medium', 'hard'] as DifficultyLevel[]).map((difficulty) => (
+                <button
+                  key={difficulty}
+                  onClick={() => handleDifficultyChange(difficulty)}
+                  className={`w-full text-left px-3 py-2 text-sm rounded transition-colors ${
+                    currentDifficulty === difficulty
+                      ? difficulty === 'easy' ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                      : difficulty === 'medium' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      : 'text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400'
+                  }`}
+                >
+                  <span>{difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}</span>
+                </button>
+              ))}
+            </div>
             
             {/* Future menu items can be added here */}
             {/* Example:
-            <button className="w-full text-left px-3 py-2 text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary rounded transition-colors">
+            <button className="w-full text-left px-3 py-2 text-sm text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400 rounded transition-colors">
               Sound Effects
             </button>
-            <button className="w-full text-left px-3 py-2 text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary rounded transition-colors">
+            <button className="w-full text-left px-3 py-2 text-sm text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400 rounded transition-colors">
               Music
             </button>
             */}

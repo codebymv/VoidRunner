@@ -7,6 +7,7 @@ import { useMobile } from "@/hooks/useMobile";
 import { VirtualJoystick } from "./VirtualJoystick";
 import { HamburgerMenu } from "./HamburgerMenu";
 import { CaptainDialog } from "./CaptainDialog";
+import { DifficultyManager, type DifficultyLevel } from "../utils/difficultyConfig";
 import shipIdleSprite from "@/assets/ship-idle.png";
 import shipThrustSprite from "@/assets/ship-thrust.png";
 import ship2IdleSprite from "@/assets/ship2-idle.png";
@@ -26,6 +27,8 @@ import redCrossSprite from "@/assets/red_cross.png";
 import shieldSprite from "@/assets/shield.svg";
 import logoImage from "@/assets/logo.png";
 import gameOverImage from "@/assets/game_over.png";
+import speech1Audio from "@/assets/speech1.mp3";
+import speech2Audio from "@/assets/speech2.mp3";
 
 interface GameObject {
   x: number;
@@ -102,12 +105,54 @@ export const GameCanvas = () => {
   const [gameState, setGameState] = useState<"menu" | "playing" | "paused" | "gameover">("menu");
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(() => parseInt(localStorage.getItem("orbitalHighScore") || "0"));
+  const [previousHighScore, setPreviousHighScore] = useState(() => parseInt(localStorage.getItem("orbitalHighScore") || "0")); // Track previous high score for display
   const [health, setHealth] = useState(3.0); // Changed from lives to health for fractional damage support
   const [shield, setShield] = useState(0.0); // Overshield that absorbs damage first (max 3.0)
   const [hasUpgraded, setHasUpgraded] = useState(false); // Track if ship has been upgraded to ship2
   const [hasUpgradedToShip3, setHasUpgradedToShip3] = useState(false); // Track if ship has been upgraded to ship3
   const [showHelp, setShowHelp] = useState(false); // State for help popup
   const [showCaptainDialog, setShowCaptainDialog] = useState(false); // State for captain dialog
+  const [showLevelUpDialog, setShowLevelUpDialog] = useState(false); // State for level-up captain dialog
+  const [showGameOverDialog, setShowGameOverDialog] = useState(false); // State for game over captain dialog
+  const [levelUpMessage, setLevelUpMessage] = useState(""); // Current level-up message
+  const [gameOverMessage, setGameOverMessage] = useState(""); // Current game over message
+  
+  // Difficulty management
+  const difficultyManagerRef = useRef<DifficultyManager>(new DifficultyManager('medium'));
+  const [currentDifficulty, setCurrentDifficulty] = useState<DifficultyLevel>('medium');
+  
+  // Captain's commentary quotes for game over
+  const captainGameOverQuotes = [
+    "... (hits cigar) That guy was epic.",
+    "... (coughs) That guy played by his own rules.",
+    "... (shaking head) Truly built different..",
+    "... (single tear) A legend cooked too soon",
+  ];
+  
+  // Captain's level-up quotes for dialog system
+  const captainLevelUpQuotes = {
+    level2: "They're gonna tell stories about ya, kid",
+    level3: "You're in charge, cap'n"
+  };
+  
+  // Function to play random captain speech
+  const playCaptainSpeech = useCallback(async () => {
+    const speechSounds = ['speech1', 'speech2'];
+    const randomSpeech = speechSounds[Math.floor(Math.random() * speechSounds.length)];
+    try {
+      await playSound(randomSpeech);
+    } catch (error) {
+      console.error('Failed to play captain speech:', error);
+    }
+  }, [playSound]);
+  
+  // Function to trigger captain level-up toast
+  const triggerCaptainLevelUpDialog = useCallback((level: 'level2' | 'level3') => {
+    const message = captainLevelUpQuotes[level];
+    setLevelUpMessage(message);
+    setShowLevelUpDialog(true);
+    playCaptainSpeech(); // Play random captain speech
+  }, [captainLevelUpQuotes, playCaptainSpeech]);
   
   // Mobile touch event prevention - only on canvas during gameplay
   useEffect(() => {
@@ -143,6 +188,12 @@ export const GameCanvas = () => {
     setShowJoystick(prev => !prev);
   }, []);
 
+  const handleDifficultyChange = useCallback((difficulty: DifficultyLevel) => {
+    const difficultyManager = difficultyManagerRef.current;
+    difficultyManager.setDifficulty(difficulty, true);
+    setCurrentDifficulty(difficulty);
+  }, []);
+
    // Handle joystick input with useCallback for stable reference
    const handleJoystickInput = useCallback((input: { x: number; y: number }) => {
     // Update both ref and state
@@ -152,6 +203,14 @@ export const GameCanvas = () => {
 
   const handleCaptainDialogComplete = useCallback(() => {
     setShowCaptainDialog(false);
+  }, []);
+
+  const handleLevelUpDialogComplete = useCallback(() => {
+    setShowLevelUpDialog(false);
+  }, []);
+
+  const handleGameOverDialogComplete = useCallback(() => {
+    setShowGameOverDialog(false);
   }, []);
 
   // Log when joystickInput state actually changes
@@ -185,15 +244,26 @@ export const GameCanvas = () => {
           setHealth(prevHealth => {
             const newHealth = prevHealth + remainingShield; // remainingShield is negative
             if (newHealth <= 0) {
+              // Delay captain's commentary by 1700ms when player dies
+              setTimeout(() => {
+                const randomQuote = captainGameOverQuotes[Math.floor(Math.random() * captainGameOverQuotes.length)];
+                setGameOverMessage(randomQuote);
+                setShowGameOverDialog(true);
+                playCaptainSpeech(); // Play random captain speech
+              }, 1700);
+              
               setGameState("gameover");
+              toastManager.clearQueue(); // Clear all pending toasts when game over
               playMenuOpen().catch(console.error); // Play menu open sound when game over screen appears
               playSound('gameOver').catch(console.error);
+              
               if (score > highScore) {
+                setPreviousHighScore(highScore); // Capture previous high score before updating
                 setHighScore(score);
                 localStorage.setItem("orbitalHighScore", score.toString());
                 priorityToast("New High Score!", 0, {
                   duration: 4000,
-                  className: "bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold"
+                  className: "bg-gradient-to-r from-blue-400 to-blue-600 text-white font-bold font-sans"
                 });
               }
             }
@@ -208,15 +278,25 @@ export const GameCanvas = () => {
       setHealth(prev => {
         const newHealth = prev - damageAmount;
         if (newHealth <= 0) {
+              // Delay captain's commentary by 1700ms when player dies
+              setTimeout(() => {
+                const randomQuote = captainGameOverQuotes[Math.floor(Math.random() * captainGameOverQuotes.length)];
+                setGameOverMessage(randomQuote);
+                setShowGameOverDialog(true);
+                playCaptainSpeech(); // Play random captain speech
+              }, 1700);
+              
               setGameState("gameover");
+              toastManager.clearQueue(); // Clear all pending toasts when game over
               playMenuOpen().catch(console.error); // Play menu open sound when game over screen appears
               playSound('gameOver').catch(console.error);
+              
               if (score > highScore) {
                 setHighScore(score);
                 localStorage.setItem("orbitalHighScore", score.toString());
                 priorityToast("New High Score!", 0, {
                   duration: 4000,
-                  className: "bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold"
+                  className: "bg-gradient-to-r from-blue-400 to-blue-600 text-white font-bold font-sans"
                 });
               }
             }
@@ -465,18 +545,10 @@ export const GameCanvas = () => {
       }
 
       const colors = ["hsl(180, 100%, 50%)", "hsl(320, 100%, 50%)", "hsl(280, 100%, 50%)"];
-      const obstacleType = Math.random();
-      let planetType: "debris" | "meteor" | "planet2" | "blackhole";
       
-      if (obstacleType < 0.25) {
-        planetType = "debris"; // 25% chance for debris (unchanged)
-      } else if (obstacleType < 0.55) {
-        planetType = "meteor"; // 30% chance for meteor (increased from 25%)
-      } else if (obstacleType < 0.85) {
-        planetType = "planet2"; // 30% chance for planet2 (increased from 25%)
-      } else {
-        planetType = "blackhole"; // 15% chance for blackhole (decreased from 25%)
-      }
+      // Use difficulty-based obstacle type distribution
+      const difficultyManager = difficultyManagerRef.current;
+      const planetType = difficultyManager.getObstacleType();
       
       const planet: Planet = {
         id: `planet_${++game.planetIdCounter}`, // Assign unique ID
@@ -761,7 +833,7 @@ export const GameCanvas = () => {
               // Show toast with dynamic color based on high score status
               priorityToast("Black hole collapsed! +500 points", 500, { 
                 duration: 3000,
-                className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
               });
               
               return newScore;
@@ -784,8 +856,11 @@ export const GameCanvas = () => {
             planet.lastScrapSpawn = Date.now();
           }
           
-          // Spawn scrap every 5-10 seconds (5000-10000ms)
-          const scrapSpawnInterval = 5000 + Math.random() * 5000;
+          // Spawn scrap every 5-10 seconds, adjusted by difficulty
+          const difficultyManager = difficultyManagerRef.current;
+          const difficultyConfig = difficultyManager.getCurrentConfig();
+          const baseScrapInterval = 5000 + Math.random() * 5000;
+          const scrapSpawnInterval = baseScrapInterval / difficultyConfig.scrapSpawnMultiplier;
           if (Date.now() - planet.lastScrapSpawn > scrapSpawnInterval) {
             // Create a small scrap object
             const scrapLifespan = 180 + Math.random() * 120; // 3-5 seconds at 60fps
@@ -880,7 +955,7 @@ export const GameCanvas = () => {
                   
                   priorityToast("Debris collision! +20 points", 20, { 
                     duration: 1000,
-                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
                   });
                   
                   return newScore;
@@ -956,7 +1031,7 @@ export const GameCanvas = () => {
                   
                   priorityToast("Debris bounce! +15 points", 15, { 
                     duration: 1000,
-                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
                   });
                   
                   return newScore;
@@ -987,7 +1062,7 @@ export const GameCanvas = () => {
                   
                   priorityToast("Debris destroyed! +75 points", 75, { 
                     duration: 1500,
-                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
                   });
                   
                   return newScore;
@@ -1019,7 +1094,7 @@ export const GameCanvas = () => {
                   
                   priorityToast("Debris bounce! +15 points", 15, { 
                     duration: 1000,
-                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
                   });
                   
                   return newScore;
@@ -1126,7 +1201,7 @@ export const GameCanvas = () => {
                 // Show toast with dynamic color based on high score status
                 priorityToast("Meteor collision! +100 points", 100, { 
                   duration: 2000,
-                  className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                  className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
                 });
                 
                 return newScore;
@@ -1171,7 +1246,7 @@ export const GameCanvas = () => {
                   // Show toast with dynamic color based on high score status
                   priorityToast("Black hole collapsed! +500 points", 500, { 
                     duration: 3000,
-                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
                   });
                   
                   return newScore;
@@ -1219,7 +1294,7 @@ export const GameCanvas = () => {
                   // Show toast with dynamic color based on high score status
                   priorityToast("Black hole merger! +100 points", 100, { 
                     duration: 2000,
-                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
                   });
                   
                   return newScore;
@@ -1324,7 +1399,7 @@ export const GameCanvas = () => {
                 
                 priorityToast(`High-speed near miss! +${nearMissPoints} points`, nearMissPoints, { 
                   duration: 2000,
-                  className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                  className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
                 });
                 
                 return newScore;
@@ -1356,7 +1431,7 @@ export const GameCanvas = () => {
               
               priorityToast("Scrap collected! +25 points", 25, { 
                 duration: 1500,
-                className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
               });
               
               return newScore;
@@ -1416,7 +1491,7 @@ export const GameCanvas = () => {
               // Show toast with dynamic color based on high score status
               priorityToast(`Lvl ${starLevel} Star Collected! +${starValue} points`, starValue, { 
                 duration: 1500,
-                className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
               });
               
               return newScore;
@@ -1485,7 +1560,7 @@ export const GameCanvas = () => {
                   
                   priorityToast("Star destroyed by meteor! +40 points", 40, { 
                     duration: 1500,
-                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
                   });
                   
                   return newScore;
@@ -1507,7 +1582,7 @@ export const GameCanvas = () => {
                   
                   priorityToast("Star absorbed by planet! +30 points", 30, { 
                     duration: 1500,
-                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
                   });
                   
                   return newScore;
@@ -1528,7 +1603,7 @@ export const GameCanvas = () => {
                   
                   priorityToast("Star consumed by black hole! +60 points", 60, { 
                     duration: 1500,
-                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
                   });
                   
                   return newScore;
@@ -1549,7 +1624,7 @@ export const GameCanvas = () => {
                   
                   priorityToast("Star sparkle with debris! +20 points", 20, { 
                     duration: 1500,
-                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
                   });
                   
                   return newScore;
@@ -1569,13 +1644,33 @@ export const GameCanvas = () => {
         return p.life > 0;
       });
 
-      // Spawning
+      // Spawning with difficulty-based rates
       game.difficulty = 1 + score * 0.001;
-      if (now - game.lastPlanetSpawn > 2000 / game.difficulty) {
+      const difficultyManager = difficultyManagerRef.current;
+      const difficultyConfig = difficultyManager.getCurrentConfig();
+      
+      // Check for auto-difficulty advancement
+      const autoAdvance = difficultyManager.checkAutoAdvance(score);
+      if (autoAdvance.shouldAdvance && autoAdvance.newDifficulty) {
+        difficultyManager.autoAdvance(autoAdvance.newDifficulty);
+        setCurrentDifficulty(autoAdvance.newDifficulty);
+        const newConfig = difficultyManager.getCurrentConfig();
+        priorityToast(`Difficulty increased to ${newConfig.displayName}!`, 50, { 
+          duration: 3000, 
+          className: 'bg-blue-500/90 text-white' 
+        });
+      }
+      
+      // Apply difficulty multipliers to spawn rates
+      const basePlanetInterval = 2000 / game.difficulty;
+      const baseStarInterval = 3000;
+      const intervals = difficultyManager.getSpawnIntervals(basePlanetInterval, baseStarInterval);
+      
+      if (now - game.lastPlanetSpawn > intervals.planetInterval) {
         spawnPlanet();
         game.lastPlanetSpawn = now;
       }
-      if (now - game.lastStarSpawn > 3000) {
+      if (now - game.lastStarSpawn > intervals.starInterval) {
         spawnStar();
         game.lastStarSpawn = now;
       }
@@ -1836,6 +1931,7 @@ export const GameCanvas = () => {
         setHasUpgraded(true);
         setHealth(3.0); // Restore to full health on upgrade
         playSound('shipUpgrades');
+        triggerCaptainLevelUpDialog('level2'); // Trigger captain dialog for level 2
       }
       
       // Check if ship just upgraded to ship3 and restore health
@@ -1843,6 +1939,7 @@ export const GameCanvas = () => {
         setHasUpgradedToShip3(true);
         setHealth(3.0); // Restore to full health on upgrade
         playSound('shipUpgrades');
+        triggerCaptainLevelUpDialog('level3'); // Trigger captain dialog for level 3
       }
       
       // Select appropriate ship sprites based on score
@@ -1892,8 +1989,23 @@ export const GameCanvas = () => {
     setHealth(3.0); // Reset to full health
     setHasUpgraded(false); // Reset upgrade state
     
+    // Only reset difficulty to medium if no manual difficulty has been set
+    const difficultyManager = difficultyManagerRef.current;
+    const currentDiff = difficultyManager.getCurrentDifficulty();
+    
+    // Check if this is a fresh start (no manual override) - only then reset to medium
+    if (!difficultyManager.isManuallySet()) {
+      difficultyManager.setDifficulty('medium', false);
+      setCurrentDifficulty('medium');
+    } else {
+      // Keep the manually set difficulty
+      setCurrentDifficulty(currentDiff);
+    }
+    
     // Show captain dialog at game start
     setShowCaptainDialog(true);
+    toastManager.clearQueue(); // Clear any pending toast notifications immediately when captain dialog appears
+    playCaptainSpeech(); // Play captain speech when dialog appears
     
     // Ensure audio starts when user interacts with the game
     try {
@@ -1917,7 +2029,6 @@ export const GameCanvas = () => {
     game.invulnerable = 180;
     game.nearMissTracker.clear(); // Clear near-miss tracking for new game
     game.planetIdCounter = 0; // Reset planet ID counter
-    toastManager.clearQueue(); // Clear any pending toast notifications
   };
 
   return (
@@ -1948,14 +2059,28 @@ export const GameCanvas = () => {
                   {/* Center section with High Score and Current Score */}
                   <div className="flex flex-col items-center gap-0.5 sm:gap-1">
                     {highScore > 0 && (
-                      <div className="text-xs sm:text-sm text-accent glow-yellow">
+                      <div className="text-xs sm:text-sm text-accent glow-blue">
                         High Score: {highScore}
                       </div>
                     )}
-                    <div className={`text-xl sm:text-2xl md:text-3xl font-bold transition-colors duration-300 ${
-                      score > highScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'
-                    }`}>
-                      {score}
+                    {/* Score and Difficulty on same row */}
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div className={`text-xl sm:text-2xl md:text-3xl font-bold transition-colors duration-300 ${
+                        score > highScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'
+                      }`}>
+                        {score}
+                      </div>
+                      
+                      {/* Difficulty Indicator */}
+                      <div className="text-xs sm:text-sm text-muted-foreground">
+                        (<span className={`font-semibold ${
+                          currentDifficulty === 'easy' ? 'text-green-400' :
+                          currentDifficulty === 'medium' ? 'text-blue-400' :
+                          'text-red-400'
+                        }`}>
+                          {currentDifficulty.charAt(0).toUpperCase() + currentDifficulty.slice(1)}
+                        </span>)
+                      </div>
                     </div>
                   </div>
                   
@@ -1973,6 +2098,8 @@ export const GameCanvas = () => {
                       isMobile={isMobile}
                       isMuted={isMuted}
                       onToggleMute={toggleMute}
+                      currentDifficulty={currentDifficulty}
+                      onDifficultyChange={handleDifficultyChange}
                     />
                   </div>
                 </div>
@@ -2053,22 +2180,35 @@ export const GameCanvas = () => {
                   <div className="flex items-center gap-8">
                     {highScore > 0 && (
                       <div className="flex flex-col items-center">
-                        <div className="text-sm text-accent glow-yellow opacity-80">
+                        <div className="text-sm text-accent glow-blue opacity-80">
                           High Score
                         </div>
-                        <div className="text-2xl font-bold text-accent glow-yellow">
+                        <div className="text-2xl font-bold text-accent glow-blue">
                           {highScore}
                         </div>
                       </div>
                     )}
                     <div className="flex flex-col items-center">
-                      <div className="text-sm text-primary glow-cyan opacity-80">
+                      <div className="text-sm text-blue-400 glow-blue opacity-80">
                         Score
                       </div>
-                      <div className={`text-4xl font-bold transition-colors duration-300 ${
-                        score > highScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'
-                      } text-glow`}>
-                        {score}
+                      <div className="flex items-center gap-3">
+                        <div className={`text-4xl font-bold transition-colors duration-300 ${
+                          score > highScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'
+                        } text-glow`}>
+                          {score}
+                        </div>
+                        
+                        {/* Difficulty Indicator */}
+                        <div className="text-sm text-muted-foreground">
+                          (<span className={`font-semibold ${
+                            currentDifficulty === 'easy' ? 'text-green-400' :
+                            currentDifficulty === 'medium' ? 'text-blue-400' :
+                            'text-red-400'
+                          }`}>
+                            {currentDifficulty.charAt(0).toUpperCase() + currentDifficulty.slice(1)}
+                          </span>)
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2120,6 +2260,8 @@ export const GameCanvas = () => {
                     isMobile={isMobile}
                     isMuted={isMuted}
                     onToggleMute={toggleMute}
+                    currentDifficulty={currentDifficulty}
+                    onDifficultyChange={handleDifficultyChange}
                   />
                 </div>
               </div>
@@ -2147,36 +2289,63 @@ export const GameCanvas = () => {
 
       {gameState === "menu" && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-card/80 backdrop-blur-xl border border-primary/30 rounded-2xl p-6 sm:p-12 text-center max-w-md w-full space-y-4 sm:space-y-6">
-            <img src={logoImage} alt="Void Runner" className="w-64 sm:w-80 h-auto mx-auto glow-cyan" />
+          <div className="bg-card/80 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-6 sm:p-12 text-center max-w-md w-full space-y-4 sm:space-y-6">
+            <img src={logoImage} alt="Void Runner" className="w-64 sm:w-80 h-auto mx-auto glow-blue" />
             <p className="text-muted-foreground text-base sm:text-lg">Run through gravitational chaos</p>
             <div className="space-y-1 sm:space-y-2 text-xs sm:text-sm text-muted-foreground text-left bg-muted/30 p-3 sm:p-4 rounded-lg">
               {isMobile ? (
                 <>
                   <p>🕹️ <strong>Virtual joystick</strong> to move</p>
-                  <p>⏸️ <strong>Pause button</strong> to pause</p>
                   <p>⭐ Collect stars for points</p>
-                  <p>💚 Collect health wrenches to restore health</p>
-                  <p>🪐 Avoid planets, meteors, debris & black holes</p>
-                  <p>💥 Debris drops dangerous scrap when damaged</p>
+                  <p>💚 Collect wrenches for health</p>
+                  <p>🪐 Avoid obstacles</p>
                 </>
               ) : (
                 <>
                   <p>🚀 <strong>WASD</strong> or <strong>Arrow Keys</strong> to thrust</p>
-                  <p>🖱️ <strong>Mouse</strong> to aim direction</p>
                   <p>⭐ Collect stars for points</p>
-                  <p>💚 Collect health wrenches to restore health</p>
-                  <p>🪐 Avoid planets, meteors, debris & black holes</p>
-                  <p>💥 Debris drops dangerous scrap when damaged</p>
-                  <p>⏸️ <strong>Escape</strong> to pause</p>
+                  <p>💚 Collect wrenches for health</p>
+                  <p>🪐 Avoid obstacles</p>
                 </>
               )}
             </div>
-            <Button onClick={startGame} size="lg" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 glow-cyan text-base sm:text-lg">
+            
+            {/* Difficulty Selector */}
+            <div className="space-y-2">
+              <div className="text-sm text-muted-foreground">Difficulty</div>
+              <div className="flex gap-2 justify-center">
+                {(['easy', 'medium', 'hard'] as DifficultyLevel[]).map((difficulty) => (
+                  <button
+                    key={difficulty}
+                    onClick={() => {
+                      const difficultyManager = difficultyManagerRef.current;
+                      difficultyManager.setDifficulty(difficulty, true);
+                      setCurrentDifficulty(difficulty);
+                    }}
+                    className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                      currentDifficulty === difficulty
+                        ? difficulty === 'easy' ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+                        : difficulty === 'medium' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
+                        : 'bg-red-500/20 text-red-400 border border-red-500/50'
+                        : 'bg-muted/30 text-muted-foreground border border-muted/50 hover:bg-blue-500/10 hover:text-blue-400'
+                    }`}
+                  >
+                    {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {currentDifficulty === 'easy' && 'Fewer obstacles, more forgiving'}
+                {currentDifficulty === 'medium' && 'Balanced gameplay, can get crazy'}
+                {currentDifficulty === 'hard' && 'More obstacles and faster, RIP'}
+              </div>
+            </div>
+            
+            <Button onClick={startGame} size="lg" className="w-full bg-blue-500 text-white hover:bg-blue-600 glow-blue text-base sm:text-lg">
               START GAME
             </Button>
             {highScore > 0 && (
-              <div className="text-accent glow-yellow text-sm sm:text-base">High Score: {highScore}</div>
+              <div className="text-accent glow-blue text-sm sm:text-base">High Score: {highScore}</div>
             )}
           </div>
         </div>
@@ -2184,18 +2353,18 @@ export const GameCanvas = () => {
 
       {gameState === "paused" && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-card/90 backdrop-blur-xl border border-primary/30 rounded-2xl p-6 sm:p-8 text-center space-y-3 sm:space-y-4 w-full max-w-sm">
-            <h2 className="text-2xl sm:text-3xl font-bold text-primary glow-cyan">PAUSED</h2>
+          <div className="bg-card/90 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-6 sm:p-8 text-center space-y-3 sm:space-y-4 w-full max-w-sm">
+            <h2 className="text-2xl sm:text-3xl font-bold text-blue-400 glow-blue">PAUSED</h2>
             
             <Button onClick={() => {
               playMenuClose().catch(console.error);
               setGameState("playing");
-            }} className="bg-primary text-primary-foreground hover:bg-primary/90 w-full">
+            }} className="bg-blue-500 text-white hover:bg-blue-600 w-full">
               RESUME
             </Button>
             
             {/* Hamburger Menu Options */}
-            <div className="space-y-2 pt-2 border-t border-primary/20">
+            <div className="space-y-2 pt-2 border-t border-blue-500/20">
               {/* Joystick Toggle - Only show on desktop */}
               {!isMobile && (
                 <Button
@@ -2205,8 +2374,8 @@ export const GameCanvas = () => {
                   variant="outline"
                   className={`w-full ${
                     showJoystick 
-                      ? 'bg-primary/20 border-primary text-primary' 
-                      : 'bg-card/50 border-primary/30 text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                      ? 'bg-blue-500/20 border-blue-500 text-blue-400' 
+                      : 'bg-card/50 border-blue-500/30 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400'
                   }`}
                 >
                   Joystick (J) {showJoystick ? '✓' : ''}
@@ -2221,12 +2390,43 @@ export const GameCanvas = () => {
                 variant="outline"
                 className={`w-full ${
                   isMuted 
-                    ? 'bg-primary/20 border-primary text-primary' 
-                    : 'bg-card/50 border-primary/30 text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                    ? 'bg-blue-500/20 border-blue-500 text-blue-400' 
+                    : 'bg-card/50 border-blue-500/30 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400'
                 }`}
               >
                 Mute (M) {isMuted ? '✓' : ''}
               </Button>
+              
+              {/* Difficulty Selection */}
+              <div className="space-y-2">
+                <div className="text-sm text-muted-foreground">Difficulty</div>
+                <div className="flex gap-1">
+                  {(['easy', 'medium', 'hard'] as const).map((difficulty) => (
+                    <button
+                      key={difficulty}
+                      onClick={() => {
+                        const difficultyManager = difficultyManagerRef.current;
+                        difficultyManager.setDifficulty(difficulty, true);
+                        setCurrentDifficulty(difficulty);
+                      }}
+                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors flex-1 ${
+                        currentDifficulty === difficulty
+                          ? difficulty === 'easy' ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+                          : difficulty === 'medium' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
+                          : 'bg-red-500/20 text-red-400 border border-red-500/50'
+                          : 'bg-muted/30 text-muted-foreground border border-muted/50 hover:bg-blue-500/10 hover:text-blue-400'
+                      }`}
+                    >
+                      {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-xs text-muted-foreground text-center">
+                  {currentDifficulty === 'easy' && 'Fewer obstacles, more forgiving'}
+                  {currentDifficulty === 'medium' && 'Balanced gameplay, can get crazy'}
+                  {currentDifficulty === 'hard' && 'More obstacles and faster, RIP'}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -2234,22 +2434,22 @@ export const GameCanvas = () => {
 
       {gameState === "gameover" && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-card/90 backdrop-blur-xl border border-destructive/50 rounded-2xl p-6 sm:p-12 text-center space-y-4 sm:space-y-6 w-full max-w-md">
+          <div className="bg-card/90 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-6 sm:p-12 text-center space-y-4 sm:space-y-6 w-full max-w-md">
             <img src={gameOverImage} alt="Game Over" className="w-48 sm:w-64 h-auto mx-auto" />
             <div className="space-y-1 sm:space-y-2">
               <div className="text-xl sm:text-2xl">
                 Score: <span className={`font-bold transition-colors duration-300 ${
-                  score >= highScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'
+                  score >= highScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'
                 }`}>{score}</span>
                 {score >= highScore && score > 0 && (
-                  <div className="text-sm text-accent glow-yellow animate-pulse">NEW HIGH SCORE!</div>
+                  <div className="text-sm text-blue-400 glow-blue animate-pulse">NEW HIGH SCORE!</div>
                 )}
               </div>
-              <div className="text-lg sm:text-xl text-muted-foreground">Previous High Score: {score >= highScore && score > 0 ? (highScore === score ? 'None' : highScore) : highScore}</div>
+              <div className="text-lg sm:text-xl text-muted-foreground">Previous High Score: {previousHighScore > 0 ? previousHighScore : 'None'}</div>
             </div>
             
             <div className="space-y-3">
-              <Button onClick={startGame} size="lg" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 glow-cyan">
+              <Button onClick={startGame} size="lg" className="w-full bg-blue-500 text-white hover:bg-blue-600 glow-blue">
                 PLAY AGAIN
               </Button>
               
@@ -2260,14 +2460,14 @@ export const GameCanvas = () => {
                 }} 
                 variant="outline" 
                 size="lg" 
-                className="w-full bg-card/50 border-primary/30 text-primary hover:bg-primary/10"
+                className="w-full bg-card/50 border-blue-500/30 text-blue-400 hover:bg-blue-500/10 hover:text-blue-400"
               >
                 MAIN MENU
               </Button>
             </div>
             
             {/* Hamburger Menu Options */}
-            <div className="space-y-2 pt-4 border-t border-primary/20">
+            <div className="space-y-2 pt-4 border-t border-blue-500/20">
               {/* Joystick Toggle - Only show on desktop */}
               {!isMobile && (
                 <Button
@@ -2277,8 +2477,8 @@ export const GameCanvas = () => {
                   variant="outline"
                   className={`w-full ${
                     showJoystick 
-                      ? 'bg-primary/20 border-primary text-primary' 
-                      : 'bg-card/50 border-primary/30 text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                      ? 'bg-blue-500/20 border-blue-500 text-blue-400' 
+                      : 'bg-card/50 border-blue-500/30 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400'
                   }`}
                 >
                   Joystick (J) {showJoystick ? '✓' : ''}
@@ -2293,12 +2493,43 @@ export const GameCanvas = () => {
                 variant="outline"
                 className={`w-full ${
                   isMuted 
-                    ? 'bg-primary/20 border-primary text-primary' 
-                    : 'bg-card/50 border-primary/30 text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                    ? 'bg-blue-500/20 border-blue-500 text-blue-400' 
+                    : 'bg-card/50 border-blue-500/30 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400'
                 }`}
               >
                 Mute (M) {isMuted ? '✓' : ''}
               </Button>
+              
+              {/* Difficulty Selection */}
+              <div className="space-y-2">
+                <div className="text-sm text-muted-foreground">Difficulty</div>
+                <div className="flex gap-1">
+                  {(['easy', 'medium', 'hard'] as const).map((difficulty) => (
+                    <button
+                      key={difficulty}
+                      onClick={() => {
+                        const difficultyManager = difficultyManagerRef.current;
+                        difficultyManager.setDifficulty(difficulty, true);
+                        setCurrentDifficulty(difficulty);
+                      }}
+                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors flex-1 ${
+                        currentDifficulty === difficulty
+                          ? difficulty === 'easy' ? 'bg-green-500/20 text-green-400 border border-green-500/50'
+                          : difficulty === 'medium' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
+                          : 'bg-red-500/20 text-red-400 border border-red-500/50'
+                          : 'bg-muted/30 text-muted-foreground border border-muted/50 hover:bg-blue-500/10 hover:text-blue-400'
+                      }`}
+                    >
+                      {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-xs text-muted-foreground text-center">
+                  {currentDifficulty === 'easy' && 'Fewer obstacles, more forgiving'}
+                  {currentDifficulty === 'medium' && 'Balanced gameplay, can get crazy'}
+                  {currentDifficulty === 'hard' && 'More obstacles and faster, RIP'}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -2314,6 +2545,20 @@ export const GameCanvas = () => {
       <CaptainDialog
         isVisible={showCaptainDialog}
         onComplete={handleCaptainDialogComplete}
+      />
+      
+      {/* Level Up Captain Dialog */}
+      <CaptainDialog
+        isVisible={showLevelUpDialog}
+        onComplete={handleLevelUpDialogComplete}
+        message={levelUpMessage}
+      />
+
+      {/* Game Over Captain Dialog */}
+      <CaptainDialog
+        isVisible={showGameOverDialog}
+        onComplete={handleGameOverDialogComplete}
+        message={gameOverMessage}
       />
     </div>
   );

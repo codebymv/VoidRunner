@@ -5,16 +5,17 @@ import talk2 from '../assets/talk2.png';
 interface CaptainDialogProps {
   isVisible: boolean;
   onComplete: () => void;
+  message?: string; // Optional custom message
 }
 
-export const CaptainDialog: React.FC<CaptainDialogProps> = ({ isVisible, onComplete }) => {
+export const CaptainDialog: React.FC<CaptainDialogProps> = ({ isVisible, onComplete, message }) => {
   const [currentImage, setCurrentImage] = useState(0);
   const [isAnimatingIn, setIsAnimatingIn] = useState(false);
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
 
   const images = [talk1, talk2];
-  const message = "Heh, don't say I didn't warn ya...";
-  const displayDuration = 10000; // 10 seconds
+  const dialogMessage = message || "Heh, don't say I didn't warn ya..."; // Use custom message or default
+  const displayDuration = 5000; // 5 seconds (reduced from 10 seconds)
   const imageSwapInterval = 800; // Switch images every 800ms
 
   useEffect(() => {
@@ -63,8 +64,8 @@ export const CaptainDialog: React.FC<CaptainDialogProps> = ({ isVisible, onCompl
           ${!isAnimatingIn && !isAnimatingOut ? '-right-96 opacity-0' : ''}
         `}
         style={{
-          minWidth: '320px',
-          maxWidth: '400px'
+          minWidth: '400px',
+          maxWidth: '500px'
         }}
       >
         {/* Captain Headshot */}
@@ -86,8 +87,8 @@ export const CaptainDialog: React.FC<CaptainDialogProps> = ({ isVisible, onCompl
           </div>
           
           {/* Message */}
-          <div className="text-white text-sm leading-relaxed">
-            {message}
+          <div className="text-white text-sm leading-relaxed break-words">
+            {dialogMessage}
           </div>
         </div>
 

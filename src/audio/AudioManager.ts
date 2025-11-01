@@ -10,6 +10,8 @@ import shipHitSound from '../assets/ship_hit.mp3';
 import menuOpenSound from '../assets/menu_open.mp3';
 import menuCloseSound from '../assets/menu_close.mp3';
 import vulnerableBlinkSound from '../assets/vulnerable_blink.mp3';
+import speech1Sound from '../assets/speech1.mp3';
+import speech2Sound from '../assets/speech2.mp3';
 
 export enum GameState {
   MENU = 'menu',
@@ -24,6 +26,7 @@ export class AudioManager {
   private masterGain: GainNode | null = null;
   private musicGain: GainNode | null = null;
   private soundEffectsGain: GainNode | null = null; // New sound effects bus
+  private speechGain: GainNode | null = null; // Dedicated speech channel for maximum volume
   private isAudioInitialized: boolean = false; // Track if audio has been initialized
   
   // Theme music
@@ -36,14 +39,16 @@ export class AudioManager {
   // Sound effects
   private soundEffects: Map<string, HTMLAudioElement> = new Map();
   private soundEffectSources: Map<string, MediaElementAudioSourceNode> = new Map(); // Web Audio API sources
+  private speechSources: Map<string, MediaElementAudioSourceNode> = new Map(); // Dedicated speech sources
   private shieldSoundPool: HTMLAudioElement[] = []; // Pool of shield sounds for overlapping playback
   private shieldPoolIndex: number = 0; // Current index in the shield sound pool
   private starAcquireCounter: number = 0; // Counter for alternating star acquire sounds
   
   // Volume levels
-  private readonly MENU_VOLUME = 0.06; // 6% (1/3 of original 18%)
-  private readonly GAMEPLAY_VOLUME = 0.083; // 8.3% (1/3 of original 25%)
-  private readonly SOUND_EFFECT_VOLUME = 0.4; // 40%
+  private readonly MENU_VOLUME = 0.15; // 15% (increased from 6%)
+  private readonly GAMEPLAY_VOLUME = 0.18; // 18% (increased from 8.3%)
+  private readonly SOUND_EFFECT_VOLUME = 0.9; // 90% - Increased for much better speech audibility
+  private readonly SPEECH_VOLUME = 0.23; // 23% - Reduced to fit better in the audio mix
   
   // Mute state
   private isMuted: boolean = false;
@@ -70,10 +75,12 @@ export class AudioManager {
       this.masterGain = this.audioContext.createGain();
       this.musicGain = this.audioContext.createGain();
       this.soundEffectsGain = this.audioContext.createGain(); // Create sound effects bus
+      this.speechGain = this.audioContext.createGain(); // Create dedicated speech channel
       
-      // Connect gain nodes - both music and sound effects go through master
+      // Connect gain nodes - music, sound effects, and speech all go through master
       this.musicGain.connect(this.masterGain);
       this.soundEffectsGain.connect(this.masterGain);
+      this.speechGain.connect(this.masterGain);
       this.masterGain.connect(this.audioContext.destination);
       
       // Initialize theme music
@@ -106,11 +113,12 @@ export class AudioManager {
   }
   
   private initializeSoundEffects(): void {
-    if (!this.audioContext || !this.soundEffectsGain) {
-      console.error('AudioContext or soundEffectsGain not initialized');
+    if (!this.audioContext || !this.soundEffectsGain || !this.speechGain) {
+      console.error('AudioContext, soundEffectsGain, or speechGain not initialized');
       return;
     }
 
+    // Regular sound effects (not speech)
     const soundFiles = {
       gameOver: gameOverSound,
       healthWrench: healthWrenchSound,
@@ -123,7 +131,14 @@ export class AudioManager {
       menuClose: menuCloseSound,
       vulnerableBlink: vulnerableBlinkSound
     };
+
+    // Speech sounds - routed through dedicated speech channel
+    const speechFiles = {
+      speech1: speech1Sound,
+      speech2: speech2Sound
+    };
     
+    // Initialize regular sound effects
     Object.entries(soundFiles).forEach(([key, src]) => {
       const audio = new Audio(src);
       audio.preload = 'auto';
@@ -134,6 +149,19 @@ export class AudioManager {
       const source = this.audioContext!.createMediaElementSource(audio);
       source.connect(this.soundEffectsGain!);
       this.soundEffectSources.set(key, source);
+    });
+
+    // Initialize speech sounds with dedicated channel
+    Object.entries(speechFiles).forEach(([key, src]) => {
+      const audio = new Audio(src);
+      audio.preload = 'auto';
+      audio.volume = 1.0; // Set to full volume, we'll control via gain node
+      this.soundEffects.set(key, audio);
+      
+      // Create Web Audio API source and connect to SPEECH bus (loudest)
+      const source = this.audioContext!.createMediaElementSource(audio);
+      source.connect(this.speechGain!);
+      this.speechSources.set(key, source);
     });
 
     // Create a pool of shield sound instances for overlapping playback
@@ -233,6 +261,8 @@ export class AudioManager {
         audio.volume = 1.0; // Maximum volume (unchanged)
       } else if (soundName === 'shipHit') {
         audio.volume = 1.0; // Increased from 0.9 to maximum volume
+      } else if (soundName === 'speech1' || soundName === 'speech2') {
+        audio.volume = 1.0; // Maximum volume for speech sounds
       } else {
         audio.volume = 0.95; // Increased from 0.8 to 0.95 for other sounds
       }
@@ -358,12 +388,22 @@ export class AudioManager {
     
     // Sync sound effects volume with music volume
     this.setSoundEffectsVolume(volume);
+    
+    // Set speech volume to maximum (always loudest)
+    this.setSpeechVolume(volume);
   }
   
   private setSoundEffectsVolume(volume: number): void {
     if (this.soundEffectsGain) {
       // Sound effects at 120% the volume of music (increased from 80% for louder effects)
       this.soundEffectsGain.gain.value = Math.max(0, Math.min(1, volume * 1.2));
+    }
+  }
+
+  private setSpeechVolume(volume: number): void {
+    if (this.speechGain) {
+      // Speech at maximum volume - always loudest element in the mix
+      this.speechGain.gain.value = this.SPEECH_VOLUME;
     }
   }
   
