@@ -362,8 +362,8 @@ export class AudioManager {
   
   private setSoundEffectsVolume(volume: number): void {
     if (this.soundEffectsGain) {
-      // Sound effects at 80% the volume of music (increased from 50%)
-      this.soundEffectsGain.gain.value = Math.max(0, Math.min(1, volume * 0.8));
+      // Sound effects at 120% the volume of music (increased from 80% for louder effects)
+      this.soundEffectsGain.gain.value = Math.max(0, Math.min(1, volume * 1.2));
     }
   }
   

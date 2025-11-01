@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "./ui/button";
-import { toast } from "sonner";
+import { priorityToast, toastManager } from "@/utils/toastPriority";
 import { StarField } from "@/utils/StarField";
 import { useAudio } from "@/hooks/useAudio";
 import { useMobile } from "@/hooks/useMobile";
 import { VirtualJoystick } from "./VirtualJoystick";
 import { HamburgerMenu } from "./HamburgerMenu";
+import { CaptainDialog } from "./CaptainDialog";
 import shipIdleSprite from "@/assets/ship-idle.png";
 import shipThrustSprite from "@/assets/ship-thrust.png";
 import ship2IdleSprite from "@/assets/ship2-idle.png";
@@ -35,6 +36,7 @@ interface GameObject {
 }
 
 interface Planet extends GameObject {
+  id: string; // Unique identifier for tracking
   mass: number;
   color: string;
   type: "debris" | "meteor" | "planet2" | "blackhole";
@@ -105,6 +107,7 @@ export const GameCanvas = () => {
   const [hasUpgraded, setHasUpgraded] = useState(false); // Track if ship has been upgraded to ship2
   const [hasUpgradedToShip3, setHasUpgradedToShip3] = useState(false); // Track if ship has been upgraded to ship3
   const [showHelp, setShowHelp] = useState(false); // State for help popup
+  const [showCaptainDialog, setShowCaptainDialog] = useState(false); // State for captain dialog
   
   // Mobile touch event prevention - only on canvas during gameplay
   useEffect(() => {
@@ -142,12 +145,16 @@ export const GameCanvas = () => {
 
    // Handle joystick input with useCallback for stable reference
    const handleJoystickInput = useCallback((input: { x: number; y: number }) => {
-     // Update both ref and state
-     joystickInputRef.current = input;
-     setJoystickInput(input);
-   }, []);
+    // Update both ref and state
+    joystickInputRef.current = input;
+    setJoystickInput(input);
+  }, []);
 
-   // Log when joystickInput state actually changes
+  const handleCaptainDialogComplete = useCallback(() => {
+    setShowCaptainDialog(false);
+  }, []);
+
+  // Log when joystickInput state actually changes
    useEffect(() => {
      console.log('🔄 joystickInput state CHANGED to:', JSON.stringify(joystickInput));
    }, [joystickInput]);
@@ -184,7 +191,10 @@ export const GameCanvas = () => {
               if (score > highScore) {
                 setHighScore(score);
                 localStorage.setItem("orbitalHighScore", score.toString());
-                toast.success("New High Score!");
+                priorityToast("New High Score!", 0, {
+                  duration: 4000,
+                  className: "bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold"
+                });
               }
             }
             return Math.max(0, newHealth);
@@ -204,7 +214,10 @@ export const GameCanvas = () => {
               if (score > highScore) {
                 setHighScore(score);
                 localStorage.setItem("orbitalHighScore", score.toString());
-                toast.success("New High Score!");
+                priorityToast("New High Score!", 0, {
+                  duration: 4000,
+                  className: "bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold"
+                });
               }
             }
         return Math.max(0, newHealth);
@@ -232,6 +245,8 @@ export const GameCanvas = () => {
     difficulty: 1,
     invulnerable: 0,
     shake: 0,
+    nearMissTracker: new Map<string, number>(), // Track near-miss cooldowns for each planet
+    planetIdCounter: 0, // Counter for generating unique planet IDs
   });
 
   useEffect(() => {
@@ -464,6 +479,7 @@ export const GameCanvas = () => {
       }
       
       const planet: Planet = {
+        id: `planet_${++game.planetIdCounter}`, // Assign unique ID
         x, y,
         vx: (canvas.width / 2 - x) * 0.0005,
         vy: (canvas.height / 2 - y) * 0.0005,
@@ -584,6 +600,8 @@ export const GameCanvas = () => {
                 const planetIndex = game.planets.indexOf(planet);
                 if (planetIndex !== -1) {
                   createExplosion(planet.x, planet.y, blastRadius * 0.7, force * 0.6, [planetIndex]);
+                  // Clean up nearMissTracker for removed planet
+                  game.nearMissTracker.delete(planet.id);
                   game.planets.splice(planetIndex, 1);
                 }
               }
@@ -706,8 +724,15 @@ export const GameCanvas = () => {
           planet.rotation += planet.rotationSpeed * delta;
         }
         
-        return planet.x > -100 && planet.x < canvas.width + 100 &&
-               planet.y > -100 && planet.y < canvas.height + 100;
+        const isInBounds = planet.x > -100 && planet.x < canvas.width + 100 &&
+                          planet.y > -100 && planet.y < canvas.height + 100;
+        
+        // Clean up nearMissTracker for planets going out of bounds
+        if (!isInBounds) {
+          game.nearMissTracker.delete(planet.id);
+        }
+        
+        return isInBounds;
       });
 
       // Check for oversized black holes that should disappear
@@ -734,13 +759,16 @@ export const GameCanvas = () => {
               const isNewHighScore = newScore > highScore;
               
               // Show toast with dynamic color based on high score status
-              toast("Black hole collapsed! +500 points", { 
+              priorityToast("Black hole collapsed! +500 points", 500, { 
                 duration: 3000,
                 className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
               });
               
               return newScore;
             });
+            
+            // Clean up nearMissTracker for removed planet
+            game.nearMissTracker.delete(planet.id);
             
             return false; // Remove the black hole
           }
@@ -845,6 +873,19 @@ export const GameCanvas = () => {
                 
                 debris.bounceCount++;
                 
+                // Award points for debris-debris collision
+                setScore(prev => {
+                  const newScore = prev + 20;
+                  const isNewHighScore = newScore > highScore;
+                  
+                  priorityToast("Debris collision! +20 points", 20, { 
+                    duration: 1000,
+                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                  });
+                  
+                  return newScore;
+                });
+                
                 // Create particles for visual effect
                 createParticles(debris.x, debris.y, "hsl(30, 70%, 60%)", 8);
               }
@@ -908,6 +949,19 @@ export const GameCanvas = () => {
                 debris.vy = -debris.vy * 0.9 + normalY * 2;
                 debris.bounceCount++;
                 
+                // Award points for debris bounce off planet
+                setScore(prev => {
+                  const newScore = prev + 15;
+                  const isNewHighScore = newScore > highScore;
+                  
+                  priorityToast("Debris bounce! +15 points", 15, { 
+                    duration: 1000,
+                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                  });
+                  
+                  return newScore;
+                });
+                
                 createParticles(debris.x, debris.y, "hsl(30, 70%, 60%)", 6);
               }
               return;
@@ -925,6 +979,19 @@ export const GameCanvas = () => {
                 blackhole.radius += debris.radius * 0.1; // Small growth from debris absorption
                 blackhole.mass += debris.mass * 0.6; // Absorb some of the debris mass
                 blackhole.gravityMultiplier = (blackhole.gravityMultiplier || 1) * 1.01; // Tiny gravity increase
+                
+                // Award points for debris destruction
+                setScore(prev => {
+                  const newScore = prev + 75;
+                  const isNewHighScore = newScore > highScore;
+                  
+                  priorityToast("Debris destroyed! +75 points", 75, { 
+                    duration: 1500,
+                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                  });
+                  
+                  return newScore;
+                });
                 
                 // Update color based on new size
                 if (blackhole.radius > 100) {
@@ -944,6 +1011,20 @@ export const GameCanvas = () => {
                 debris.vx += normalX * 3;
                 debris.vy += normalY * 3;
                 debris.bounceCount++;
+                
+                // Award points for debris bounce
+                setScore(prev => {
+                  const newScore = prev + 15;
+                  const isNewHighScore = newScore > highScore;
+                  
+                  priorityToast("Debris bounce! +15 points", 15, { 
+                    duration: 1000,
+                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                  });
+                  
+                  return newScore;
+                });
+                
                 createParticles(debris.x, debris.y, "hsl(30, 70%, 60%)", 4);
               }
               return;
@@ -1043,7 +1124,7 @@ export const GameCanvas = () => {
                 const isNewHighScore = newScore > highScore;
                 
                 // Show toast with dynamic color based on high score status
-                toast("Meteor collision! +100 points", { 
+                priorityToast("Meteor collision! +100 points", 100, { 
                   duration: 2000,
                   className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
                 });
@@ -1088,7 +1169,7 @@ export const GameCanvas = () => {
                   const isNewHighScore = newScore > highScore;
                   
                   // Show toast with dynamic color based on high score status
-                  toast("Black hole collapsed! +500 points", { 
+                  priorityToast("Black hole collapsed! +500 points", 500, { 
                     duration: 3000,
                     className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
                   });
@@ -1116,6 +1197,7 @@ export const GameCanvas = () => {
                 
                 // Create the enhanced black hole
                 game.planets.push({
+                  id: `planet_${++game.planetIdCounter}`, // Assign unique ID
                   x: explosionX,
                   y: explosionY,
                   vx: (planet1.vx + planet2.vx) / 2 * 0.9, // Slightly slower due to increased mass
@@ -1135,7 +1217,7 @@ export const GameCanvas = () => {
                   const isNewHighScore = newScore > highScore;
                   
                   // Show toast with dynamic color based on high score status
-                  toast("Black hole merger! +100 points", { 
+                  priorityToast("Black hole merger! +100 points", 100, { 
                     duration: 2000,
                     className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
                   });
@@ -1193,17 +1275,109 @@ export const GameCanvas = () => {
           }
         });
 
-        // Scrap collisions (15% damage)
+        // Near-miss detection for high-speed planets (award points for close calls with fast-moving objects)
+        game.planets.forEach((planet) => {
+          const dx = planet.x - game.ship.x;
+          const dy = planet.y - game.ship.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          // Calculate planet speed
+          const planetSpeed = Math.sqrt(planet.vx * planet.vx + planet.vy * planet.vy);
+          const highSpeedThreshold = 8; // Objects moving faster than this are considered "hurled"
+          
+          // Near-miss range: just outside collision range but still close
+          const collisionRange = planet.radius + game.ship.radius;
+          const nearMissRange = collisionRange * 1.6; // 60% larger than collision range
+          
+          // Only award near-miss for high-speed objects and only once per entity
+          if (dist > collisionRange && dist < nearMissRange && planetSpeed > highSpeedThreshold) {
+            // Check if we haven't already awarded points for this specific planet using its unique ID
+            if (!game.nearMissTracker.has(planet.id)) {
+              game.nearMissTracker.set(planet.id, Date.now());
+              
+              // Award large points based on planet type and speed
+              let nearMissPoints = Math.round(100 + (planetSpeed * 10)); // Base 100 + speed bonus
+              let planetTypeName = "high-speed obstacle";
+              
+              switch (planet.type) {
+                case "blackhole":
+                  nearMissPoints = Math.round(200 + (planetSpeed * 15));
+                  planetTypeName = "hurled black hole";
+                  break;
+                case "meteor":
+                  nearMissPoints = Math.round(150 + (planetSpeed * 12));
+                  planetTypeName = "hurled meteor";
+                  break;
+                case "planet2":
+                  nearMissPoints = Math.round(120 + (planetSpeed * 10));
+                  planetTypeName = "hurled planet";
+                  break;
+                case "debris":
+                  nearMissPoints = Math.round(80 + (planetSpeed * 8));
+                  planetTypeName = "hurled debris";
+                  break;
+              }
+              
+              setScore(prev => {
+                const newScore = prev + nearMissPoints;
+                const isNewHighScore = newScore > highScore;
+                
+                priorityToast(`High-speed near miss! +${nearMissPoints} points`, nearMissPoints, { 
+                  duration: 2000,
+                  className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                });
+                
+                return newScore;
+              });
+              
+              // Create dramatic particles for high-speed near-miss
+              createParticles(game.ship.x, game.ship.y, "hsl(45, 100%, 60%)", 15); // Golden particles for high reward
+              createParticles(planet.x, planet.y, "hsl(200, 100%, 70%)", 8); // Blue trail particles
+              playSound('starAcquire'); // Sound feedback
+            }
+          }
+        });
+
+        // Scrap collisions - can be collected for points or cause damage
         game.scraps.forEach(scrap => {
           const dx = scrap.x - game.ship.x;
           const dy = scrap.y - game.ship.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < scrap.radius + game.ship.radius) {
+          
+          // Larger collection radius for scrap collection
+          const collectionRadius = (scrap.radius + game.ship.radius) * 1.5;
+          const damageRadius = scrap.radius + game.ship.radius;
+          
+          if (dist < collectionRadius && dist >= damageRadius) {
+            // Scrap collection for points (safe distance)
+            setScore(prev => {
+              const newScore = prev + 25;
+              const isNewHighScore = newScore > highScore;
+              
+              priorityToast("Scrap collected! +25 points", 25, { 
+                duration: 1500,
+                className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+              });
+              
+              return newScore;
+            });
+            
+            createParticles(scrap.x, scrap.y, "hsl(120, 100%, 50%)", 12); // Green collection particles
+            playSound('starAcquire');
+            
+            // Remove the scrap after collection
+            const scrapIndex = game.scraps.indexOf(scrap);
+            if (scrapIndex > -1) {
+              game.scraps.splice(scrapIndex, 1);
+            }
+          } else if (dist < damageRadius) {
+            // Scrap collision damage (too close)
             createParticles(game.ship.x, game.ship.y, "hsl(30, 80%, 60%)", 8); // Orange particles for scrap damage
             game.invulnerable = 60; // Shorter invulnerability for minor damage
             playSound('shieldActivate'); // Immediate shield sound feedback
             game.shake = 8; // Less screen shake
             takeDamage(0.45); // 15% damage (0.45 health points)
+            
             // Remove the scrap after collision
             const scrapIndex = game.scraps.indexOf(scrap);
             if (scrapIndex > -1) {
@@ -1240,7 +1414,7 @@ export const GameCanvas = () => {
               }
               
               // Show toast with dynamic color based on high score status
-              toast(`Lvl ${starLevel} Star Collected! +${starValue} points`, { 
+              priorityToast(`Lvl ${starLevel} Star Collected! +${starValue} points`, starValue, { 
                 duration: 1500,
                 className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
               });
@@ -1303,6 +1477,20 @@ export const GameCanvas = () => {
                 createParticles(star.x, star.y, "hsl(60, 100%, 50%)", 8);
                 createParticles(planet.x, planet.y, "hsl(0, 100%, 70%)", 5);
                 star.collected = true;
+                
+                // Award points for meteor destroying star
+                setScore(prev => {
+                  const newScore = prev + 40;
+                  const isNewHighScore = newScore > highScore;
+                  
+                  priorityToast("Star destroyed by meteor! +40 points", 40, { 
+                    duration: 1500,
+                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                  });
+                  
+                  return newScore;
+                });
+                playSound('starAcquire');
                 break;
                 
               case "planet2":
@@ -1311,6 +1499,20 @@ export const GameCanvas = () => {
                 createParticles(planet.x, planet.y, "hsl(180, 100%, 50%)", 4);
                 planet.radius += 0.5; // Slight growth
                 star.collected = true;
+                
+                // Award points for planet absorbing star
+                setScore(prev => {
+                  const newScore = prev + 30;
+                  const isNewHighScore = newScore > highScore;
+                  
+                  priorityToast("Star absorbed by planet! +30 points", 30, { 
+                    duration: 1500,
+                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                  });
+                  
+                  return newScore;
+                });
+                playSound('starAcquire');
                 break;
                 
               case "blackhole":
@@ -1318,6 +1520,20 @@ export const GameCanvas = () => {
                 createParticles(star.x, star.y, "hsl(60, 100%, 50%)", 12);
                 createParticles(planet.x, planet.y, "hsl(270, 100%, 50%)", 8);
                 star.collected = true;
+                
+                // Award points for blackhole absorbing star
+                setScore(prev => {
+                  const newScore = prev + 60;
+                  const isNewHighScore = newScore > highScore;
+                  
+                  priorityToast("Star consumed by black hole! +60 points", 60, { 
+                    duration: 1500,
+                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                  });
+                  
+                  return newScore;
+                });
+                playSound('starAcquire');
                 break;
                 
               case "debris":
@@ -1325,6 +1541,20 @@ export const GameCanvas = () => {
                 createParticles(star.x, star.y, "hsl(60, 100%, 50%)", 4);
                 createParticles(planet.x, planet.y, "hsl(30, 100%, 60%)", 3);
                 star.collected = true;
+                
+                // Award points for debris interacting with star
+                setScore(prev => {
+                  const newScore = prev + 20;
+                  const isNewHighScore = newScore > highScore;
+                  
+                  priorityToast("Star sparkle with debris! +20 points", 20, { 
+                    duration: 1500,
+                    className: `${isNewHighScore ? 'text-accent glow-yellow' : 'text-primary glow-cyan'} font-bold transition-colors duration-300`
+                  });
+                  
+                  return newScore;
+                });
+                playSound('starAcquire');
                 break;
             }
           }
@@ -1468,6 +1698,13 @@ export const GameCanvas = () => {
       game.scraps.forEach(scrap => {
         if (scrapImg.current && scrapImg.current.complete) {
           ctx.save();
+          
+          // Add glow effect to indicate scraps are collectible (matching star levels)
+          ctx.shadowBlur = 15;
+          
+          // Neutral white glow for scraps to distinguish from stars
+           ctx.shadowColor = "hsl(0, 0%, 90%)";
+          
           ctx.translate(scrap.x, scrap.y);
           ctx.rotate(scrap.rotation);
           
@@ -1484,6 +1721,7 @@ export const GameCanvas = () => {
             spriteSize
           );
           
+          ctx.shadowBlur = 0; // Reset shadow
           ctx.restore();
         } else {
           // Fallback rendering if image not loaded
@@ -1500,20 +1738,25 @@ export const GameCanvas = () => {
       game.stars.forEach(star => {
         ctx.save();
         ctx.shadowBlur = 15;
-        ctx.shadowColor = "hsl(60, 100%, 50%)";
         
-        // Determine which star sprite to use based on current score (ship level)
-        let starImage: HTMLImageElement;
-        if (score >= 5000) {
-          // Ship level 3 - stars worth 1000 points
-          starImage = starUpgrade2Img.current;
-        } else if (score >= 1500) {
-          // Ship level 2 - stars worth 100 points
-          starImage = starUpgradeImg.current;
-        } else {
-          // Ship level 1 - stars worth 10 points
-          starImage = starImg.current;
-        }
+        // Determine glow color and star sprite based on current score (ship level)
+         let starImage: HTMLImageElement;
+         let glowColor: string;
+         if (score >= 5000) {
+           // Ship level 3 - stars worth 1000 points - Purple glow
+           starImage = starUpgrade2Img.current;
+           glowColor = "hsl(280, 100%, 50%)";
+         } else if (score >= 1500) {
+           // Ship level 2 - stars worth 100 points - Red glow
+           starImage = starUpgradeImg.current;
+           glowColor = "hsl(0, 100%, 50%)";
+         } else {
+           // Ship level 1 - stars worth 10 points - Yellow glow
+           starImage = starImg.current;
+           glowColor = "hsl(60, 100%, 50%)";
+         }
+        
+        ctx.shadowColor = glowColor;
         
         const spriteSize = star.radius * 4; // Make the star image larger than the original circle
         ctx.drawImage(
@@ -1649,6 +1892,9 @@ export const GameCanvas = () => {
     setHealth(3.0); // Reset to full health
     setHasUpgraded(false); // Reset upgrade state
     
+    // Show captain dialog at game start
+    setShowCaptainDialog(true);
+    
     // Ensure audio starts when user interacts with the game
     try {
       await startThemeMusic();
@@ -1669,6 +1915,9 @@ export const GameCanvas = () => {
     game.particles = [];
     game.difficulty = 1;
     game.invulnerable = 180;
+    game.nearMissTracker.clear(); // Clear near-miss tracking for new game
+    game.planetIdCounter = 0; // Reset planet ID counter
+    toastManager.clearQueue(); // Clear any pending toast notifications
   };
 
   return (
@@ -1937,12 +2186,48 @@ export const GameCanvas = () => {
         <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-card/90 backdrop-blur-xl border border-primary/30 rounded-2xl p-6 sm:p-8 text-center space-y-3 sm:space-y-4 w-full max-w-sm">
             <h2 className="text-2xl sm:text-3xl font-bold text-primary glow-cyan">PAUSED</h2>
+            
             <Button onClick={() => {
               playMenuClose().catch(console.error);
               setGameState("playing");
             }} className="bg-primary text-primary-foreground hover:bg-primary/90 w-full">
               RESUME
             </Button>
+            
+            {/* Hamburger Menu Options */}
+            <div className="space-y-2 pt-2 border-t border-primary/20">
+              {/* Joystick Toggle - Only show on desktop */}
+              {!isMobile && (
+                <Button
+                  onClick={() => {
+                    setShowJoystick(!showJoystick);
+                  }}
+                  variant="outline"
+                  className={`w-full ${
+                    showJoystick 
+                      ? 'bg-primary/20 border-primary text-primary' 
+                      : 'bg-card/50 border-primary/30 text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                  }`}
+                >
+                  Joystick (J) {showJoystick ? '✓' : ''}
+                </Button>
+              )}
+              
+              {/* Mute Toggle */}
+              <Button
+                onClick={() => {
+                  toggleMute();
+                }}
+                variant="outline"
+                className={`w-full ${
+                  isMuted 
+                    ? 'bg-primary/20 border-primary text-primary' 
+                    : 'bg-card/50 border-primary/30 text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                }`}
+              >
+                Mute (M) {isMuted ? '✓' : ''}
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -1962,9 +2247,59 @@ export const GameCanvas = () => {
               </div>
               <div className="text-lg sm:text-xl text-muted-foreground">Previous High Score: {score >= highScore && score > 0 ? (highScore === score ? 'None' : highScore) : highScore}</div>
             </div>
-            <Button onClick={startGame} size="lg" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 glow-cyan">
-              PLAY AGAIN
-            </Button>
+            
+            <div className="space-y-3">
+              <Button onClick={startGame} size="lg" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 glow-cyan">
+                PLAY AGAIN
+              </Button>
+              
+              <Button 
+                onClick={() => {
+                  playMenuClose().catch(console.error);
+                  setGameState("menu");
+                }} 
+                variant="outline" 
+                size="lg" 
+                className="w-full bg-card/50 border-primary/30 text-primary hover:bg-primary/10"
+              >
+                MAIN MENU
+              </Button>
+            </div>
+            
+            {/* Hamburger Menu Options */}
+            <div className="space-y-2 pt-4 border-t border-primary/20">
+              {/* Joystick Toggle - Only show on desktop */}
+              {!isMobile && (
+                <Button
+                  onClick={() => {
+                    setShowJoystick(!showJoystick);
+                  }}
+                  variant="outline"
+                  className={`w-full ${
+                    showJoystick 
+                      ? 'bg-primary/20 border-primary text-primary' 
+                      : 'bg-card/50 border-primary/30 text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                  }`}
+                >
+                  Joystick (J) {showJoystick ? '✓' : ''}
+                </Button>
+              )}
+              
+              {/* Mute Toggle */}
+              <Button
+                onClick={() => {
+                  toggleMute();
+                }}
+                variant="outline"
+                className={`w-full ${
+                  isMuted 
+                    ? 'bg-primary/20 border-primary text-primary' 
+                    : 'bg-card/50 border-primary/30 text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                }`}
+              >
+                Mute (M) {isMuted ? '✓' : ''}
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -1973,6 +2308,12 @@ export const GameCanvas = () => {
       <VirtualJoystick
         onMove={handleJoystickInput}
         isVisible={gameState === "playing" && (isMobile || showJoystick)}
+      />
+      
+      {/* Captain Dialog */}
+      <CaptainDialog
+        isVisible={showCaptainDialog}
+        onComplete={handleCaptainDialogComplete}
       />
     </div>
   );
