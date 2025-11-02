@@ -52,6 +52,7 @@ All colors MUST be HSL.
   body {
     @apply bg-gradient-to-b from-background via-[hsl(240,30%,6%)] to-black text-foreground overflow-hidden;
   }
+
 }
 
 @layer utilities {

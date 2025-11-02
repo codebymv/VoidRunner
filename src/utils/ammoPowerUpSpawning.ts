@@ -60,7 +60,7 @@ export const renderAmmoPowerUp = (
   const glowIntensity = 0.5 + Math.sin(powerUp.pulsePhase * 0.15) * 0.5;
   
   ctx.shadowBlur = 20 * pulseScale;
-  ctx.shadowColor = `rgba(251, 191, 36, ${glowIntensity})`; // Gold glow
+  ctx.shadowColor = `rgba(192, 192, 192, ${glowIntensity})`; // Silver glow
   
   // Draw the image or fallback circle
   if (image && image.complete) {
@@ -73,8 +73,8 @@ export const renderAmmoPowerUp = (
       size
     );
   } else {
-    // Fallback: draw a gold circle with ammo symbol
-    ctx.fillStyle = `rgba(251, 191, 36, ${0.8 + glowIntensity * 0.2})`;
+    // Fallback: draw a silver circle with ammo symbol
+    ctx.fillStyle = `rgba(192, 192, 192, ${0.8 + glowIntensity * 0.2})`;
     ctx.beginPath();
     ctx.arc(powerUp.x, powerUp.y, powerUp.radius * pulseScale, 0, Math.PI * 2);
     ctx.fill();

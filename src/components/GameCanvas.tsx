@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "./ui/button";
 import { priorityToast, toastManager, formatToastWithCombo } from "@/utils/toastPriority";
+import { showPickupNotification } from "./PickupNotification";
 import { StarField } from "@/utils/StarField";
 import { useAudio } from "@/hooks/useAudio";
 import { useMobile } from "@/hooks/useMobile";
@@ -934,10 +935,15 @@ export const GameCanvas = () => {
         }
       }
       // Passive ammo regeneration (when not empty and not unlimited)
+      // Only starts after 2 seconds of not shooting
       else if (!isUnlimitedAmmo && ammo < maxAmmo && ammo > 0) {
-        // Regenerate 1 ammo per frame (60 FPS = ~1.67 ammo per second, takes ~60 seconds for full recharge)
-        // Adjust the rate: 0.5 = slower, 2 = faster
-        setAmmo(prev => Math.min(maxAmmo, prev + 0.5));
+        const timeSinceLastShot = Date.now() - lastShotTimeRef.current;
+        const PASSIVE_REGEN_COOLDOWN = 2000; // 2 second cooldown before passive regen starts
+        
+        if (timeSinceLastShot >= PASSIVE_REGEN_COOLDOWN) {
+          // Regenerate 0.5 ammo per frame (~30 per second at 60 FPS)
+          setAmmo(prev => Math.min(maxAmmo, prev + 0.5));
+        }
       }
 
       // Handle unlimited ammo expiration
@@ -1788,6 +1794,16 @@ export const GameCanvas = () => {
             wrench.collected = true;
             playSound('healthWrench');
             
+            // Award points for repairs (+150)
+            const pointsAwarded = 150;
+            setScore(prev => prev + pointsAwarded);
+            
+            // Show pickup notification (custom component below score toasts)
+            showPickupNotification(
+              "🔧 Repairs +150 pts",
+              'bg-gradient-to-r from-green-400 to-emerald-500 text-slate-900 font-bold shadow-lg'
+            );
+            
             // Trigger green health glow effect for 1 second (use ref for immediate feedback)
             healthGlowEndTimeRef.current = Date.now() + 1000;
             
@@ -1841,10 +1857,16 @@ export const GameCanvas = () => {
             setIsRecharging(false);
             playSound('unlimitedAmmo').catch(() => {}); // Play unlimited ammo pickup sound
             createParticles(powerUp.x, powerUp.y, "hsl(45, 100%, 50%)", 30);
-            priorityToast("Unlimited Ammo!", 1000, {
-              duration: 2000,
-              className: 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-900 font-bold shadow-lg'
-            });
+            
+            // Award points for unlimited ammo (+500)
+            const pointsAwarded = 500;
+            setScore(prev => prev + pointsAwarded);
+            
+            // Show pickup notification (custom component below score toasts)
+            showPickupNotification(
+              "💎 Unlimited Ammo! +500 pts",
+              'bg-gradient-to-r from-gray-300 to-slate-400 text-slate-900 font-bold shadow-lg'
+            );
           }
         }
       });

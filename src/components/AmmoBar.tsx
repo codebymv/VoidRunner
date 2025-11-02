@@ -34,15 +34,15 @@ export const AmmoBar = ({
         style={{ 
           filter: canShoot 
             ? isUnlimitedAmmo
-              ? 'drop-shadow(0 0 8px #fbbf24) brightness(1.3)' // Gold glow for unlimited
+              ? 'drop-shadow(0 0 8px #c0c0c0) brightness(1.3)' // Silver glow for unlimited
               : 'drop-shadow(0 0 4px #60a5fa)' // Light blue glow
             : 'drop-shadow(0 0 2px #64748b)' 
         }} 
       />
-      <div className={`relative ${barWidth} ${barHeight} bg-black/50 rounded-full border transition-all duration-300 ${canShoot ? (isUnlimitedAmmo ? 'border-yellow-500/50' : 'border-cyan-500/50') : 'border-gray-500/30'}`}>
+      <div className={`relative ${barWidth} ${barHeight} bg-black/50 rounded-full border transition-all duration-300 ${canShoot ? (isUnlimitedAmmo ? 'border-gray-400/50' : 'border-cyan-500/50') : 'border-gray-500/30'}`}>
         <div 
           className={`absolute top-0 left-0 h-full rounded-full transition-all duration-300 ${
-            isUnlimitedAmmo ? 'bg-gradient-to-r from-yellow-400 to-amber-500' : 
+            isUnlimitedAmmo ? 'bg-gradient-to-r from-gray-300 to-slate-400' : 
             isRecharging ? 'bg-cyan-400' : 
             'bg-cyan-500'
           }`}
@@ -50,7 +50,7 @@ export const AmmoBar = ({
             width: isUnlimitedAmmo ? '100%' : `${ammoPercentage}%`,
             boxShadow: canShoot 
               ? isUnlimitedAmmo 
-                ? `0 0 ${size === 'mobile' ? '10px' : '12px'} #fbbf24`
+                ? `0 0 ${size === 'mobile' ? '10px' : '12px'} #c0c0c0`
                 : `0 0 ${size === 'mobile' ? '8px' : '10px'} #60a5fa`
               : 'none',
             animation: isRecharging ? 'pulse 1s ease-in-out infinite' : 'none'

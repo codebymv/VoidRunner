@@ -33,6 +33,9 @@ export class AudioManager {
   private audioContext: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private masterLowpassFilter: BiquadFilterNode | null = null; // Low-pass filter for master output
+  private masterCompressor: DynamicsCompressorNode | null = null; // Master bus compressor
+  private masterLimiter: DynamicsCompressorNode | null = null; // Brick-wall limiter for peak control
+  private makeupGain: GainNode | null = null; // Makeup gain after compression
   private musicGain: GainNode | null = null;
   private soundEffectsGain: GainNode | null = null; // New sound effects bus
   private speechGain: GainNode | null = null; // Dedicated speech channel for maximum volume
@@ -99,6 +102,7 @@ export class AudioManager {
       this.speechGain = this.audioContext.createGain(); // Create dedicated speech channel
       this.shipIdleGain = this.audioContext.createGain(); // Ship idle engine loop
       this.shipThrustGain = this.audioContext.createGain(); // Ship thrust engine loop
+      this.makeupGain = this.audioContext.createGain(); // Makeup gain after compression
       
       // Create low-pass filter for master output (cuts high frequencies above 12kHz)
       this.masterLowpassFilter = this.audioContext.createBiquadFilter();
@@ -106,14 +110,39 @@ export class AudioManager {
       this.masterLowpassFilter.frequency.value = 12000; // 12kHz cutoff
       this.masterLowpassFilter.Q.value = 0.7071; // Butterworth response (flat passband)
       
-      // Connect gain nodes - music, sound effects, speech, and ship engines all go through master → lowpass → destination
+      // Create master bus compressor for glue and punch
+      this.masterCompressor = this.audioContext.createDynamicsCompressor();
+      this.masterCompressor.threshold.setValueAtTime(-24, this.audioContext.currentTime); // Start compressing at -24dB
+      this.masterCompressor.knee.setValueAtTime(6, this.audioContext.currentTime); // Soft knee for smooth compression
+      this.masterCompressor.ratio.setValueAtTime(4, this.audioContext.currentTime); // 4:1 ratio for noticeable but musical compression
+      this.masterCompressor.attack.setValueAtTime(0.003, this.audioContext.currentTime); // 3ms attack (fast enough for transients)
+      this.masterCompressor.release.setValueAtTime(0.25, this.audioContext.currentTime); // 250ms release (musical timing)
+      
+      // Create brick-wall limiter for safety and loudness
+      this.masterLimiter = this.audioContext.createDynamicsCompressor();
+      this.masterLimiter.threshold.setValueAtTime(-3, this.audioContext.currentTime); // Limit at -3dB (safety headroom)
+      this.masterLimiter.knee.setValueAtTime(0, this.audioContext.currentTime); // Hard knee for true limiting
+      this.masterLimiter.ratio.setValueAtTime(20, this.audioContext.currentTime); // 20:1 ratio (essentially brick-wall)
+      this.masterLimiter.attack.setValueAtTime(0.001, this.audioContext.currentTime); // 1ms attack (instant limiting)
+      this.masterLimiter.release.setValueAtTime(0.1, this.audioContext.currentTime); // 100ms release (fast recovery)
+      
+      // Set makeup gain to compensate for compression (bring up to modern standards)
+      // This adds ~9dB to bring the -20dB output up to around -11dB to -12dB (streaming standard)
+      this.makeupGain.gain.setValueAtTime(2.8, this.audioContext.currentTime); // ~9dB boost (linear gain)
+      
+      // Master signal chain:
+      // Buses → Master Gain → Low-pass Filter → Compressor → Makeup Gain → Limiter → Output
+      // This order ensures: mixing → tonal shaping → dynamics → level matching → safety limiting
       this.musicGain.connect(this.masterGain);
       this.soundEffectsGain.connect(this.masterGain);
       this.speechGain.connect(this.masterGain);
       this.shipIdleGain.connect(this.masterGain);
       this.shipThrustGain.connect(this.masterGain);
       this.masterGain.connect(this.masterLowpassFilter);
-      this.masterLowpassFilter.connect(this.audioContext.destination);
+      this.masterLowpassFilter.connect(this.masterCompressor);
+      this.masterCompressor.connect(this.makeupGain);
+      this.makeupGain.connect(this.masterLimiter);
+      this.masterLimiter.connect(this.audioContext.destination);
       
       // Initialize theme music
       this.themeAudio = new Audio(themeMusic);
@@ -743,6 +772,10 @@ export class AudioManager {
     this.masterGain = null;
     this.musicGain = null;
     this.soundEffectsGain = null;
+    this.masterLowpassFilter = null;
+    this.masterCompressor = null;
+    this.masterLimiter = null;
+    this.makeupGain = null;
   }
 }
 

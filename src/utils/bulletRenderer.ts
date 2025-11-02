@@ -16,25 +16,25 @@ export const renderBullets = (
     ctx.save();
     
     // Choose color based on bullet type and unlimited ammo state
-    // Gold overrides all colors when unlimited ammo is active
+    // Platinum/silver overrides all colors when unlimited ammo is active
     const isPurple = bullet.isPurple || false;
     const glowColor = isUnlimitedAmmo
-      ? `rgba(251, 191, 36, ${opacity})` // Gold glow (unlimited ammo)
+      ? `rgba(192, 192, 192, ${opacity})` // Silver glow (unlimited ammo)
       : isPurple 
       ? `rgba(168, 85, 247, ${opacity})` // Purple glow
       : `rgba(96, 165, 250, ${opacity})`; // Blue glow
     const coreColor = isUnlimitedAmmo
-      ? `rgba(252, 211, 77, ${opacity})` // Light gold (unlimited ammo)
+      ? `rgba(211, 211, 211, ${opacity})` // Light silver (unlimited ammo)
       : isPurple
       ? `rgba(192, 132, 252, ${opacity})` // Light purple
       : `rgba(147, 197, 253, ${opacity})`; // Light blue
     const centerColor = isUnlimitedAmmo
-      ? `rgba(254, 243, 199, ${opacity})` // Very light gold/white (unlimited ammo)
+      ? `rgba(245, 245, 245, ${opacity})` // Very light silver/white (unlimited ammo)
       : isPurple
       ? `rgba(233, 213, 255, ${opacity})` // Very light purple/white
       : `rgba(224, 242, 254, ${opacity})`; // Very light blue/white
     
-    // Glow effect - gold glows the most, then purple, then blue
+    // Glow effect - silver glows the most, then purple, then blue
     ctx.shadowBlur = isUnlimitedAmmo ? 25 : isPurple ? 20 : 15;
     ctx.shadowColor = glowColor;
     
@@ -57,7 +57,7 @@ export const renderBullets = (
     const trailY = bullet.y - Math.sin(angle) * trailLength;
     
     const trailColor = isUnlimitedAmmo
-      ? '251, 191, 36' // Gold trail (unlimited ammo)
+      ? '192, 192, 192' // Silver trail (unlimited ammo)
       : isPurple ? '168, 85, 247' : '96, 165, 250';
     const gradient = ctx.createLinearGradient(bullet.x, bullet.y, trailX, trailY);
     gradient.addColorStop(0, `rgba(${trailColor}, ${opacity * 0.8})`);

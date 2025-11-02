@@ -107,8 +107,8 @@ export const CaptainDialog: React.FC<CaptainDialogProps> = ({ isVisible, onCompl
       <div 
         className={`
           absolute top-1/2 -translate-y-1/2 
-          bg-gradient-to-br from-slate-800/70 to-slate-900/70 
-          backdrop-blur-sm border border-slate-600/50 
+          bg-gradient-to-br from-slate-900/90 to-black/90 
+          backdrop-blur-sm border border-slate-700/40 
           rounded-xl shadow-2xl p-4 flex items-center gap-4
           transition-all duration-500 ease-out
           ${isAnimatingIn && !isAnimatingOut ? 'right-8 opacity-100' : ''}
