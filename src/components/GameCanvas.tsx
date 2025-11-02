@@ -1864,7 +1864,7 @@ export const GameCanvas = () => {
             
             // Show pickup notification (custom component below score toasts)
             showPickupNotification(
-              "💎 Unlimited Ammo! +500 pts",
+              "Unlimited Ammo! +500 pts",
               'bg-gradient-to-r from-gray-300 to-slate-400 text-slate-900 font-bold shadow-lg'
             );
           }
@@ -2041,7 +2041,7 @@ export const GameCanvas = () => {
       });
       ctx.globalAlpha = 1;
 
-      // Render bullets (gold when unlimited ammo is active)
+      // Render bullets (silver when unlimited ammo is active)
       renderBullets(ctx, game.bullets, isUnlimitedAmmo);
 
       game.planets.forEach(planet => {
@@ -2645,16 +2645,16 @@ export const GameCanvas = () => {
                         style={{
                           filter: (hasWeapon && (ammo > 0 || isUnlimitedAmmo))
                             ? isUnlimitedAmmo
-                              ? 'drop-shadow(0 0 8px #fbbf24) brightness(1.3)'
+                              ? 'drop-shadow(0 0 8px #c0c0c0) brightness(1.3)'
                               : 'drop-shadow(0 0 4px #60a5fa)'
                             : 'drop-shadow(0 0 2px #64748b)',
                           content: `url(${unlimitedAmmoImage})`
                         }}
                       />
-                      <div className={`relative w-16 sm:w-20 h-2 sm:h-2.5 bg-black/50 rounded-full border transition-all duration-300 ${hasWeapon ? (isUnlimitedAmmo ? 'border-yellow-500/50' : 'border-cyan-500/50') : 'border-gray-500/30'}`}>
+                      <div className={`relative w-16 sm:w-20 h-2 sm:h-2.5 bg-black/50 rounded-full border transition-all duration-300 ${hasWeapon ? (isUnlimitedAmmo ? 'border-gray-400/50' : 'border-cyan-500/50') : 'border-gray-500/30'}`}>
                         <div 
                           className={`absolute top-0 left-0 h-full rounded-full transition-all duration-300 ${
-                            isUnlimitedAmmo ? 'bg-gradient-to-r from-yellow-400 to-amber-500' : 
+                            isUnlimitedAmmo ? 'bg-gradient-to-r from-gray-300 to-slate-400' : 
                             isRecharging ? 'bg-cyan-400' : 
                             'bg-cyan-500'
                           }`}
@@ -2662,7 +2662,7 @@ export const GameCanvas = () => {
                             width: !hasWeapon ? '0%' : (isUnlimitedAmmo ? '100%' : `${Math.max(0, (ammo / maxAmmo) * 100)}%`),
                             boxShadow: hasWeapon
                               ? isUnlimitedAmmo 
-                                ? '0 0 10px #fbbf24'
+                                ? '0 0 10px #c0c0c0'
                                 : '0 0 8px #60a5fa'
                               : 'none',
                             animation: isRecharging ? 'pulse 1s ease-in-out infinite' : 'none'
@@ -2783,16 +2783,16 @@ export const GameCanvas = () => {
                     style={{
                       filter: (hasWeapon && (ammo > 0 || isUnlimitedAmmo))
                         ? isUnlimitedAmmo
-                          ? 'drop-shadow(0 0 8px #fbbf24) brightness(1.3)'
+                          ? 'drop-shadow(0 0 8px #c0c0c0) brightness(1.3)'
                           : 'drop-shadow(0 0 4px #60a5fa)'
                         : 'drop-shadow(0 0 2px #64748b)',
                       content: `url(${unlimitedAmmoImage})`
                     }}
                   />
-                  <div className={`relative w-32 h-3 bg-black/50 rounded-full border transition-all duration-300 ${hasWeapon ? (isUnlimitedAmmo ? 'border-yellow-500/50' : 'border-cyan-500/50') : 'border-gray-500/30'}`}>
+                  <div className={`relative w-32 h-3 bg-black/50 rounded-full border transition-all duration-300 ${hasWeapon ? (isUnlimitedAmmo ? 'border-gray-400/50' : 'border-cyan-500/50') : 'border-gray-500/30'}`}>
                     <div 
                       className={`absolute top-0 left-0 h-full rounded-full transition-all duration-300 ${
-                        isUnlimitedAmmo ? 'bg-gradient-to-r from-yellow-400 to-amber-500' : 
+                        isUnlimitedAmmo ? 'bg-gradient-to-r from-gray-300 to-slate-400' : 
                         isRecharging ? 'bg-cyan-400' : 
                         'bg-cyan-500'
                       }`}
@@ -2800,7 +2800,7 @@ export const GameCanvas = () => {
                         width: !hasWeapon ? '0%' : (isUnlimitedAmmo ? '100%' : `${Math.max(0, (ammo / maxAmmo) * 100)}%`),
                         boxShadow: hasWeapon
                           ? isUnlimitedAmmo 
-                            ? '0 0 12px #fbbf24'
+                            ? '0 0 12px #c0c0c0'
                             : '0 0 10px #60a5fa'
                           : 'none',
                         animation: isRecharging ? 'pulse 1s ease-in-out infinite' : 'none'
