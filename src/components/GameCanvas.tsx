@@ -158,7 +158,7 @@ export const GameCanvas = () => {
   
   // Auto-switch from hard difficulty if not unlocked
   useEffect(() => {
-    if (currentDifficulty === 'hard' && highScore < 7000) {
+    if (currentDifficulty === 'hard' && highScore < 12500) {
       const difficultyManager = difficultyManagerRef.current;
       difficultyManager.setDifficulty('medium', true);
       setCurrentDifficulty('medium');
@@ -271,7 +271,7 @@ export const GameCanvas = () => {
   
   // Helper function to get star acquisition amount based on ship level
   const getStarValue = (currentScore: number) => {
-    if (currentScore >= 7000) {
+    if (currentScore >= 12500) {
       return 1000; // Ship level 3
     } else if (currentScore >= 1500) {
       return 100; // Ship level 2
@@ -2209,7 +2209,7 @@ export const GameCanvas = () => {
         // Determine glow color and star sprite based on current score (ship level)
          let starImage: HTMLImageElement;
          let glowColor: string;
-         if (score >= 7000) {
+         if (score >= 12500) {
            // Ship level 3 - stars worth 1000 points - Purple glow
            starImage = starUpgrade2Img.current;
            glowColor = "hsl(280, 100%, 50%)";
@@ -2371,9 +2371,9 @@ export const GameCanvas = () => {
         ctx.restore();
       }
 
-      // Ship sprite upgrades: ship1 (0-1499), ship2 (1500-6999), ship3 (7000+)
+      // Ship sprite upgrades: ship1 (0-1499), ship2 (1500-12499), ship3 (12500+)
       const isUpgradedToShip2 = score >= 1500;
-      const isUpgradedToShip3 = score >= 7000;
+      const isUpgradedToShip3 = score >= 12500;
       
       // Check if ship just upgraded to ship2 and restore health + ammo
       if (isUpgradedToShip2 && !hasUpgraded) {
@@ -2871,7 +2871,7 @@ export const GameCanvas = () => {
               <div className="text-sm text-muted-foreground">Difficulty</div>
               <div className="flex gap-2 justify-center">
                 {(['easy', 'medium', 'hard'] as DifficultyLevel[]).map((difficulty) => {
-                  const isHardLocked = difficulty === 'hard' && highScore < 7000;
+                  const isHardLocked = difficulty === 'hard' && highScore < 12500;
                   return (
                   <button
                     key={difficulty}
@@ -3068,7 +3068,7 @@ export const GameCanvas = () => {
                         <div className="text-xs opacity-70">1,500+ pts</div>
                       </div>
                     </div>
-                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 5000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 12500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
                       <img 
                         src={trophyImage} 
                         alt="Trophy" 
@@ -3076,7 +3076,7 @@ export const GameCanvas = () => {
                       />
                       <div className="flex-1">
                         <div className="font-semibold">Ace Pilot</div>
-                        <div className="text-xs opacity-70">7,000+ pts</div>
+                        <div className="text-xs opacity-70">12,500+ pts</div>
                       </div>
                     </div>
                     <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
@@ -3237,7 +3237,7 @@ export const GameCanvas = () => {
                         <div className="text-xs opacity-70">1,500+ pts</div>
                       </div>
                     </div>
-                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 5000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 12500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
                       <img 
                         src={trophyImage} 
                         alt="Trophy" 
@@ -3245,7 +3245,7 @@ export const GameCanvas = () => {
                       />
                       <div className="flex-1">
                         <div className="font-semibold">Ace Pilot</div>
-                        <div className="text-xs opacity-70">7,000+ pts</div>
+                        <div className="text-xs opacity-70">12,500+ pts</div>
                       </div>
                     </div>
                     <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
