@@ -2851,7 +2851,7 @@ export const GameCanvas = () => {
         <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-card/80 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-6 sm:p-12 text-center max-w-md w-full space-y-4 sm:space-y-6">
             <img src={logoImage} alt="Void Runner" className="w-64 sm:w-80 h-auto mx-auto glow-blue" />
-            <p className="text-muted-foreground text-base sm:text-lg">Run through gravitational chaos</p>
+            <p className="text-muted-foreground text-base sm:text-lg">Survive gravitational chaos</p>
             <div className="space-y-1 sm:space-y-2 text-xs sm:text-sm text-muted-foreground text-left bg-muted/30 p-3 sm:p-4 rounded-lg">
               {isMobile ? (
                 <>
