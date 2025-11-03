@@ -323,7 +323,7 @@ export class AudioManager {
       }
       
       try {
-        audio.volume = 0.95;
+        audio.volume = 0.73;
         audio.currentTime = 0;
         console.log(`🎵 Playing alternating star acquire sound: ${actualSoundName}`);
         audio.play().catch(error => {
@@ -348,9 +348,9 @@ export class AudioManager {
   try {
         // Special handling for game over sound - make it louder
         if (soundName === 'gameOver') {
-          audio.volume = 0.7; // Lowered from 1.0
+          audio.volume = 0.65; // Lowered from 1.0
         } else if (soundName === 'shipHit') {
-          audio.volume = 0.7; // Lowered from 1.0
+          audio.volume = 0.6; // Lowered from 1.0
         } else if (soundName === 'unlimitedAmmo') { // Added specific case
           audio.volume = 0.6; // Lowered from the default 0.95
         } else if (soundName === 'healthWrench') {
