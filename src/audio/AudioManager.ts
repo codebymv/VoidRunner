@@ -345,19 +345,21 @@ export class AudioManager {
     
     console.log(`✅ Found sound '${soundName}', attempting to play...`);
     
-    try {
-      // Special handling for game over sound - make it louder
-      if (soundName === 'gameOver') {
-        audio.volume = 1.0; // Maximum volume (unchanged)
-      } else if (soundName === 'shipHit') {
-        audio.volume = 1.0; // Increased from 0.9 to maximum volume
-      } else if (soundName === 'healthWrench') {
-        audio.volume = 1.0; // Maximum volume for health restoration
-      } else if (soundName === 'speech1' || soundName === 'speech2') {
-        audio.volume = 0.80; // Slightly lower volume for captain speech
-      } else {
-        audio.volume = 0.95; // Increased from 0.8 to 0.95 for other sounds
-      }
+  try {
+        // Special handling for game over sound - make it louder
+        if (soundName === 'gameOver') {
+          audio.volume = 0.7; // Lowered from 1.0
+        } else if (soundName === 'shipHit') {
+          audio.volume = 0.7; // Lowered from 1.0
+        } else if (soundName === 'unlimitedAmmo') { // Added specific case
+          audio.volume = 0.6; // Lowered from the default 0.95
+        } else if (soundName === 'healthWrench') {
+          audio.volume = 1.0; // Maximum volume for health restoration
+        } else if (soundName === 'speech1' || soundName === 'speech2') {
+          audio.volume = 0.80; // Slightly lower volume for captain speech
+        } else {
+          audio.volume = 0.95; // Increased from 0.8 to 0.95 for other sounds
+        }
       
       // Reset audio to beginning and play
       audio.currentTime = 0;
