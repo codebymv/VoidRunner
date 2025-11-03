@@ -1576,7 +1576,7 @@ export const GameCanvas = () => {
             if (bulletSpeed > 0) {
               const bulletDirX = bullet.vx / bulletSpeed;
               const bulletDirY = bullet.vy / bulletSpeed;
-              const knockbackStrength = (damage * 0.35) / Math.sqrt(planet.mass); // Stronger knockback for more noticeable effect
+              const knockbackStrength = (damage * 0.5) / Math.sqrt(planet.mass); // Stronger knockback for more noticeable effect
               planet.vx += bulletDirX * knockbackStrength;
               planet.vy += bulletDirY * knockbackStrength;
             }
