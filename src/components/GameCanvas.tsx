@@ -2856,14 +2856,14 @@ export const GameCanvas = () => {
               {isMobile ? (
                 <>
                   <p>🕹️ <strong>Virtual joystick</strong> to move</p>
-                  <p>⭐ Collect stars for points</p>
+                  <p>⭐ Collect stars & scrap for points</p>
                   <p>💚 Collect wrenches for health</p>
                   <p>🪐 Avoid obstacles</p>
                 </>
               ) : (
                 <>
                   <p>🚀 <strong>WASD</strong> or <strong>Arrow Keys</strong> to thrust</p>
-                  <p>⭐ Collect stars for points</p>
+                  <p>⭐ Collect stars & scrap for points</p>
                   <p>💚 Collect wrenches for health</p>
                   <p>🪐 Avoid obstacles</p>
                 </>
