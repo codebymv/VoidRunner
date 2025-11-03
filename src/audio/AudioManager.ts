@@ -68,8 +68,8 @@ export class AudioManager {
   private idleFadeoutScheduled: boolean = false; // Track if fadeout is scheduled
   
   // Volume levels
-  private readonly MENU_VOLUME = 0.36; // 32% - Very subtle background music
-  private readonly GAMEPLAY_VOLUME = 0.38; // 34% - Lowered further for better gameplay audio balance
+  private readonly MENU_VOLUME = 0.39; // 39% - Very subtle background music
+  private readonly GAMEPLAY_VOLUME = 0.41; // 41% - Lowered further for better gameplay audio balance
   private readonly SOUND_EFFECT_VOLUME = 1.0; // 100% - Maximum volume for shooting sounds
   private readonly SPEECH_VOLUME = 0.20; // 20% - Reduced to fit better in the audio mix
   private readonly SHIP_ENGINE_VOLUME = 0.15; // 15% - Background engine ambience
@@ -323,7 +323,7 @@ export class AudioManager {
       }
       
       try {
-        audio.volume = 0.73;
+        audio.volume = 0.68;
         audio.currentTime = 0;
         console.log(`🎵 Playing alternating star acquire sound: ${actualSoundName}`);
         audio.play().catch(error => {
@@ -348,13 +348,13 @@ export class AudioManager {
   try {
         // Special handling for game over sound - make it louder
         if (soundName === 'gameOver') {
-          audio.volume = 0.6; // Lowered from 1.0
-        } else if (soundName === 'shipHit') {
           audio.volume = 0.5; // Lowered from 1.0
+        } else if (soundName === 'shipHit') {
+          audio.volume = 0.45; // Lowered from 1.0
         } else if (soundName === 'unlimitedAmmo') { // Added specific case
-          audio.volume = 0.62; // Lowered from the default 0.95
+          audio.volume = 0.6; // Lowered from the default 0.95
         } else if (soundName === 'healthWrench') {
-          audio.volume = 0.85; // Maximum volume for health restoration
+          audio.volume = 0.8; // Maximum volume for health restoration
         } else if (soundName === 'speech1' || soundName === 'speech2') {
           audio.volume = 0.80; // Slightly lower volume for captain speech
         } else {
