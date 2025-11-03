@@ -68,8 +68,8 @@ export class AudioManager {
   private idleFadeoutScheduled: boolean = false; // Track if fadeout is scheduled
   
   // Volume levels
-  private readonly MENU_VOLUME = 0.20; // 12% - Very subtle background music
-  private readonly GAMEPLAY_VOLUME = 0.22; // 22% - Lowered further for better gameplay audio balance
+  private readonly MENU_VOLUME = 0.24; // 24% - Very subtle background music
+  private readonly GAMEPLAY_VOLUME = 0.27; // 27% - Lowered further for better gameplay audio balance
   private readonly SOUND_EFFECT_VOLUME = 1.0; // 100% - Maximum volume for shooting sounds
   private readonly SPEECH_VOLUME = 0.20; // 20% - Reduced to fit better in the audio mix
   private readonly SHIP_ENGINE_VOLUME = 0.15; // 15% - Background engine ambience
