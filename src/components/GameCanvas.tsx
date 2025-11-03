@@ -858,9 +858,9 @@ export const GameCanvas = () => {
         const shootNow = Date.now();
         if (shootNow - lastShotTimeRef.current > FIRE_RATE) {
           if (isUnlimitedAmmo || ammo > 0) {
-            // Create bullet - ONLY purple at level 3 (score >= 7000)
+            // Create bullet - ONLY purple at level 3 (score >= 12500)
             // Level 2 (score 1500-6999) = blue bullets (hasUpgradedToShip3 = false)
-            // Level 3 (score 7000+) = purple bullets (hasUpgradedToShip3 = true)
+            // Level 3 (score 12500+) = purple bullets (hasUpgradedToShip3 = true)
             const bullet = createBullet(game.ship, hasUpgradedToShip3);
             game.bullets.push(bullet);
             
@@ -2920,11 +2920,11 @@ export const GameCanvas = () => {
                       <div className="text-xs opacity-70">1,500+ pts</div>
                     </div>
                   </div>
-                  <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 7000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                  <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 12500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
                     <img 
                       src={trophyImage} 
                       alt="Trophy" 
-                      className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 7000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                      className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 12500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
                     />
                     <div className="flex-1">
                       <div className="font-semibold">Ace Pilot</div>
@@ -3019,7 +3019,7 @@ export const GameCanvas = () => {
                 <div className="text-sm text-muted-foreground">Difficulty</div>
                 <div className="flex gap-1">
                   {(['easy', 'medium', 'hard'] as const).map((difficulty) => {
-                    const isHardLocked = difficulty === 'hard' && highScore < 7000;
+                    const isHardLocked = difficulty === 'hard' && highScore < 12500;
                     return (
                     <button
                       key={difficulty}
@@ -3188,7 +3188,7 @@ export const GameCanvas = () => {
                 <div className="text-sm text-muted-foreground">Difficulty</div>
                 <div className="flex gap-1">
                   {(['easy', 'medium', 'hard'] as const).map((difficulty) => {
-                    const isHardLocked = difficulty === 'hard' && highScore < 7000;
+                    const isHardLocked = difficulty === 'hard' && highScore < 12500;
                     return (
                     <button
                       key={difficulty}
