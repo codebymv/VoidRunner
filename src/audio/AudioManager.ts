@@ -68,10 +68,10 @@ export class AudioManager {
   private idleFadeoutScheduled: boolean = false; // Track if fadeout is scheduled
   
   // Volume levels
-  private readonly MENU_VOLUME = 0.12; // 12% - Very subtle background music
-  private readonly GAMEPLAY_VOLUME = 0.15; // 15% - Lowered further for better gameplay audio balance
+  private readonly MENU_VOLUME = 0.20; // 12% - Very subtle background music
+  private readonly GAMEPLAY_VOLUME = 0.22; // 22% - Lowered further for better gameplay audio balance
   private readonly SOUND_EFFECT_VOLUME = 1.0; // 100% - Maximum volume for shooting sounds
-  private readonly SPEECH_VOLUME = 0.23; // 23% - Reduced to fit better in the audio mix
+  private readonly SPEECH_VOLUME = 0.20; // 20% - Reduced to fit better in the audio mix
   private readonly SHIP_ENGINE_VOLUME = 0.15; // 15% - Background engine ambience
   
   // Mute state
@@ -487,8 +487,8 @@ export class AudioManager {
   
   private setSoundEffectsVolume(volume: number): void {
     if (this.soundEffectsGain) {
-      // Sound effects at 100% the volume of music (increased from 80% for louder effects)
-      this.soundEffectsGain.gain.value = Math.max(0, Math.min(1, volume * 1.0));
+      // Sound effects at 80%
+      this.soundEffectsGain.gain.value = Math.max(0, Math.min(1, volume * 0.8));
     }
   }
 
