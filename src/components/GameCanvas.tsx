@@ -3052,58 +3052,62 @@ export const GameCanvas = () => {
                 </div>
               </div>
               
-              {/* Achievements - Show when any previous score exists */}
-              {highScore > 0 && (
-                <div className="space-y-2 pt-4 border-t border-blue-500/20">
-                  <div className="text-sm text-muted-foreground">Achievements</div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 1500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                      <img 
-                        src={trophyImage} 
-                        alt="Trophy" 
-                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 1500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                      />
-                      <div className="flex-1">
-                        <div className="font-semibold">Ship Lvl 2</div>
-                        <div className="text-xs opacity-70">1,500+ pts</div>
+{/* Achievements - Show when any previous score exists */}
+                {highScore > 0 && (
+                  <div className="space-y-2 pt-4 border-t border-blue-500/20">
+                    <div className="text-sm text-muted-foreground">Achievements</div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {/* Rookie */}
+                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 1500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                        <img 
+                          src={trophyImage} 
+                          alt="Trophy" 
+                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 1500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                        />
+                        <div className="flex-1">
+                          <div className="font-semibold">Rookie</div>
+                          <div className="text-xs opacity-70">1,500+ pts</div>
+                        </div>
                       </div>
-                    </div>
-                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 12500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                      <img 
-                        src={trophyImage} 
-                        alt="Trophy" 
-                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 5000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                      />
-                      <div className="flex-1">
-                        <div className="font-semibold">Ace Pilot</div>
-                        <div className="text-xs opacity-70">12,500+ pts</div>
+                      {/* Ace Pilot */}
+                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 12500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                        <img 
+                          src={trophyImage} 
+                          alt="Trophy" 
+                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 12500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                        />
+                        <div className="flex-1">
+                          <div className="font-semibold">Ace Pilot</div>
+                          <div className="text-xs opacity-70">12,500+ pts</div>
+                        </div>
                       </div>
-                    </div>
-                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                      <img 
-                        src={trophyImage} 
-                        alt="Trophy" 
-                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 25000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                      />
-                      <div className="flex-1">
-                        <div className="font-semibold">Ace Pilot</div>
-                        <div className="text-xs opacity-70">25,000+ pts</div>
+                      {/* Legend */}
+                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                        <img 
+                          src={trophyImage} 
+                          alt="Trophy" 
+                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 25000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                        />
+                        <div className="flex-1">
+                          <div className="font-semibold">Legend</div>
+                          <div className="text-xs opacity-70">25,000+ pts</div>
+                        </div>
                       </div>
-                    </div>
-                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 75000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                      <img 
-                        src={trophyImage} 
-                        alt="Trophy" 
-                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 75000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                      />
-                      <div className="flex-1">
-                        <div className="font-semibold">Legend</div>
-                        <div className="text-xs opacity-70">75,000+ pts</div>
+                      {/* Psychonaut */}
+                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 75000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                        <img 
+                          src={trophyImage} 
+                          alt="Trophy" 
+                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 75000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                        />
+                        <div className="flex-1">
+                          <div className="font-semibold">Psychonaut</div>
+                          <div className="text-xs opacity-70">75,000+ pts</div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
             </div>
           </div>
         </div>
@@ -3221,58 +3225,62 @@ export const GameCanvas = () => {
                 </div>
               </div>
               
-              {/* Achievements - Show when any previous score exists */}
-              {highScore > 0 && (
-                <div className="space-y-2 pt-4 border-t border-blue-500/20">
-                  <div className="text-sm text-muted-foreground">Achievements</div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 1500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                      <img 
-                        src={trophyImage} 
-                        alt="Trophy" 
-                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 1500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                      />
-                      <div className="flex-1">
-                        <div className="font-semibold">Ship Lvl 2</div>
-                        <div className="text-xs opacity-70">1,500+ pts</div>
+{/* Achievements - Show when any previous score exists */}
+                {highScore > 0 && (
+                  <div className="space-y-2 pt-4 border-t border-blue-500/20">
+                    <div className="text-sm text-muted-foreground">Achievements</div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {/* Rookie */}
+                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 1500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                        <img 
+                          src={trophyImage} 
+                          alt="Trophy" 
+                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 1500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                        />
+                        <div className="flex-1">
+                          <div className="font-semibold">Rookie</div>
+                          <div className="text-xs opacity-70">1,500+ pts</div>
+                        </div>
                       </div>
-                    </div>
-                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 12500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                      <img 
-                        src={trophyImage} 
-                        alt="Trophy" 
-                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 5000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                      />
-                      <div className="flex-1">
-                        <div className="font-semibold">Ace Pilot</div>
-                        <div className="text-xs opacity-70">12,500+ pts</div>
+                      {/* Ace Pilot */}
+                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 12500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                        <img 
+                          src={trophyImage} 
+                          alt="Trophy" 
+                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 12500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                        />
+                        <div className="flex-1">
+                          <div className="font-semibold">Ace Pilot</div>
+                          <div className="text-xs opacity-70">12,500+ pts</div>
+                        </div>
                       </div>
-                    </div>
-                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                      <img 
-                        src={trophyImage} 
-                        alt="Trophy" 
-                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 25000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                      />
-                      <div className="flex-1">
-                        <div className="font-semibold">Ace Pilot</div>
-                        <div className="text-xs opacity-70">25,000+ pts</div>
+                      {/* Legend */}
+                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                        <img 
+                          src={trophyImage} 
+                          alt="Trophy" 
+                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 25000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                        />
+                        <div className="flex-1">
+                          <div className="font-semibold">Legend</div>
+                          <div className="text-xs opacity-70">25,000+ pts</div>
+                        </div>
                       </div>
-                    </div>
-                    <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 75000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                      <img 
-                        src={trophyImage} 
-                        alt="Trophy" 
-                        className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 75000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                      />
-                      <div className="flex-1">
-                        <div className="font-semibold">Legend</div>
-                        <div className="text-xs opacity-70">75,000+ pts</div>
+                      {/* Psychonaut */}
+                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 75000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
+                        <img 
+                          src={trophyImage} 
+                          alt="Trophy" 
+                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 75000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+                        />
+                        <div className="flex-1">
+                          <div className="font-semibold">Psychonaut</div>
+                          <div className="text-xs opacity-70">75,000+ pts</div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
             </div>
           </div>
         </div>
