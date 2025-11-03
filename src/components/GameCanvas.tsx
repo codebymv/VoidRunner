@@ -2928,7 +2928,7 @@ export const GameCanvas = () => {
                     />
                     <div className="flex-1">
                       <div className="font-semibold">Ace Pilot</div>
-                      <div className="text-xs opacity-70">7,000+ pts</div>
+                      <div className="text-xs opacity-70">12,500+ pts</div>
                     </div>
                   </div>
                   <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
