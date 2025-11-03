@@ -719,7 +719,8 @@ export const GameCanvas = () => {
         y: Math.random() * canvas.height,
         vx: 0, vy: 0,
         radius: 6 * mobileScaleFactor,
-        collected: false
+        collected: false,
+        pulsePhase: Math.random() * Math.PI * 2 // Start at a random phase
       });
     };
 
@@ -2206,6 +2207,9 @@ export const GameCanvas = () => {
         ctx.save();
         ctx.shadowBlur = 15;
         
+        star.pulsePhase += 0.1; // Increment pulse phase
+        const pulseScale = 1 + Math.sin(star.pulsePhase) * 0.2; // Calculate scale
+        
         // Determine glow color and star sprite based on current score (ship level)
          let starImage: HTMLImageElement;
          let glowColor: string;
@@ -2225,7 +2229,7 @@ export const GameCanvas = () => {
         
         ctx.shadowColor = glowColor;
         
-        const spriteSize = star.radius * 4; // Make the star image larger than the original circle
+        const spriteSize = star.radius * 4 * pulseScale; // Apply pulse scale
         ctx.drawImage(
           starImage,
           star.x - spriteSize / 2,
