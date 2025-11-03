@@ -26,6 +26,7 @@ export interface Planet extends GameObject {
 
 export interface Star extends GameObject {
   collected: boolean;
+  pulsePhase: number; // For visual pulsing effect
 }
 
 export interface ShipTrail {
