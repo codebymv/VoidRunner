@@ -1,6 +1,5 @@
 import { Button } from "./button";
 import { DifficultyLevel } from "@/utils/difficultyConfig";
-import gameOverImage from "@/assets/game_over.png";
 import { AchievementCarousel } from "../AchievementCarousel";
 import { DifficultySelector } from "./DifficultySelector";
 
@@ -42,7 +41,7 @@ export const GameOverMenu = ({
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
       <div className="bg-card/90 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-5 sm:p-10 text-center space-y-4 sm:space-y-6 w-full max-w-lg">
-        <img src={gameOverImage} alt="Game Over" className="w-48 sm:w-64 h-auto mx-auto" />
+        <h2 className="text-3xl sm:text-4xl font-bold text-blue-400 glow-blue">GAME OVER</h2>
         <div className="space-y-1 sm:space-y-2">
           <div className="text-xl sm:text-2xl">
             Score: <span className={`font-bold transition-colors duration-300 ${

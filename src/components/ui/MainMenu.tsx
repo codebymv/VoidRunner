@@ -28,9 +28,9 @@ export const MainMenu = ({
 }: MainMenuProps) => {
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-card/80 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-5 sm:p-10 text-center max-w-lg w-full space-y-4 sm:space-y-6">
-        <img src={logoImage} alt="Void Runner" className="w-64 sm:w-80 h-auto mx-auto glow-blue" />
-        <p className="text-muted-foreground text-base sm:text-lg">Survive gravitational chaos</p>
+      <div className="bg-card/80 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-4 sm:p-6 text-center max-w-lg w-full space-y-2 sm:space-y-3">
+        <img src={logoImage} alt="Void Runner" className="w-48 sm:w-56 h-auto mx-auto glow-blue" />
+        <p className="text-muted-foreground text-sm sm:text-base">Survive gravitational chaos</p>
         
         {/* Controls Card */}
         <ControlsCard isMobile={isMobile} />
@@ -50,7 +50,7 @@ export const MainMenu = ({
           shotsFired={shotsFired}
         />
         
-        <Button onClick={onStartGame} size="lg" className="w-full bg-blue-500 text-white hover:bg-blue-600 glow-blue text-base sm:text-lg mt-4">
+        <Button onClick={onStartGame} size="lg" className="w-full bg-blue-500 text-white hover:bg-blue-600 glow-blue text-base sm:text-lg mt-2">
           START GAME
         </Button>
         {highScore > 0 && (

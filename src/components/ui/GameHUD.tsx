@@ -55,7 +55,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   return (
     <>
       {/* UI Header - Responsive Layout */}
-      <div className="w-full max-w-6xl mb-0">
+      <div className="w-full mb-0">
         {isMobile ? (
           /* Mobile Layout - Stacked */
           <div className="space-y-0.5">
@@ -229,9 +229,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </div>
         ) : (
           /* Desktop Layout - Single Row */
-          <div className="flex items-center justify-between px-2">
+          <div className="flex items-center justify-between px-6">
             {/* Left side - Logo and Score */}
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-10">
               <img 
                 src={logoImage} 
                 alt="Game Logo" 
@@ -242,7 +242,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               {/* Vertical divider */}
               <div className="h-10 w-px bg-primary/30"></div>
               
-              <div className="flex items-center gap-6">
+              <div className="flex items-center gap-10">
                 {highScore > 0 && (
                   <div className="flex flex-col items-center">
                     <div className="text-xs text-accent glow-blue opacity-80">
@@ -280,7 +280,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             </div>
             
             {/* Right side - Health, Shield, Ammo, and Menu */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-4">
               <img src={redCrossSprite} alt="Health" className="w-6 h-6 drop-shadow-lg" style={{filter: 'drop-shadow(0 0 4px #00ffff)'}} />
               <div className="relative w-32 h-3 bg-black/50 rounded-full border border-primary/30">
                 <div 

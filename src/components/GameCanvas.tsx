@@ -151,9 +151,9 @@ export const GameCanvas = () => {
       { id: 'legend', threshold: 25000, check: () => score >= 25000 },
       { id: 'psychonaut', threshold: 75000, check: () => score >= 75000 },
       { id: 'voidwizard', threshold: 300000, check: () => score >= 300000 },
-      { id: 'untouchable', threshold: 100, check: () => nearMisses >= 100 },
+      { id: 'untouchable', threshold: 50, check: () => nearMisses >= 50 },
       { id: 'builtdifferent', threshold: 50, check: () => repairs >= 50 },
-      { id: 'lockedin', threshold: 1000, check: () => shotsFired >= 1000 },
+      { id: 'lockedin', threshold: 5000, check: () => shotsFired >= 5000 },
     ];
     
     const achievementsUnlocked = achievements.filter(a => a.check()).length;
@@ -2061,38 +2061,41 @@ export const GameCanvas = () => {
     >
       {/* Game Area Container */}
       <div className="flex flex-col items-center w-full h-full p-0 justify-start">
-        {/* Game HUD - Extracted Component */}
-        {gameState === "playing" && (
-          <GameHUD
-            score={score}
-            highScore={highScore}
-            health={health}
-            shield={shield}
-            ammo={ammo}
-            maxAmmo={maxAmmo}
-            hasWeapon={hasWeapon}
-            isUnlimitedAmmo={isUnlimitedAmmo}
-            isRecharging={isRecharging}
-            currentDifficulty={currentDifficulty}
-            showHelp={showHelp}
-            showJoystick={showJoystick}
-            isMobile={isMobile}
-            isMuted={isMuted}
-            onPause={() => {
-              setGameState("paused");
-              setAudioGameState(GameState.PAUSED); // Update audio volume for pause menu
-            }}
-            onToggleHelp={() => setShowHelp(!showHelp)}
-            onToggleJoystick={handleToggleJoystick}
-            onToggleMute={toggleMute}
-            onDifficultyChange={handleDifficultyChange}
-            playMenuOpen={playMenuOpen}
-          />
-        )}
-        
-        {/* Game Canvas */}
-        <div className="relative border-2 border-primary/30 rounded-lg overflow-hidden shadow-2xl">
-          <canvas ref={canvasRef} className="block" />
+        {/* Game Canvas with HUD */}
+        <div className="relative">
+          {/* Game HUD - Extracted Component */}
+          {gameState === "playing" && (
+            <GameHUD
+              score={score}
+              highScore={highScore}
+              health={health}
+              shield={shield}
+              ammo={ammo}
+              maxAmmo={maxAmmo}
+              hasWeapon={hasWeapon}
+              isUnlimitedAmmo={isUnlimitedAmmo}
+              isRecharging={isRecharging}
+              currentDifficulty={currentDifficulty}
+              showHelp={showHelp}
+              showJoystick={showJoystick}
+              isMobile={isMobile}
+              isMuted={isMuted}
+              onPause={() => {
+                setGameState("paused");
+                setAudioGameState(GameState.PAUSED); // Update audio volume for pause menu
+              }}
+              onToggleHelp={() => setShowHelp(!showHelp)}
+              onToggleJoystick={handleToggleJoystick}
+              onToggleMute={toggleMute}
+              onDifficultyChange={handleDifficultyChange}
+              playMenuOpen={playMenuOpen}
+            />
+          )}
+          
+          {/* Canvas Container */}
+          <div className="border-2 border-primary/30 rounded-lg overflow-hidden shadow-2xl">
+            <canvas ref={canvasRef} className="block" />
+          </div>
         </div>
       </div>
 

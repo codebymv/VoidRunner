@@ -23,9 +23,9 @@ const ALL_ACHIEVEMENTS: Achievement[] = [
   { id: 'legend', name: 'Legend', threshold: 25000, description: '25,000+ pts' },
   { id: 'psychonaut', name: 'Psychonaut', threshold: 75000, description: '75,000+ pts' },
   { id: 'voidwizard', name: 'Void Wizard', threshold: 300000, description: '300,000+ pts' },
-  { id: 'untouchable', name: "Can't Touch This", threshold: 100, description: '100 near misses' },
+  { id: 'untouchable', name: "Can't Touch This", threshold: 50, description: '50 near misses' },
   { id: 'builtdifferent', name: 'Built Different', threshold: 50, description: '50 repairs' },
-  { id: 'lockedin', name: 'Locked In', threshold: 1000, description: '1,000 shots fired' },
+  { id: 'lockedin', name: 'Locked In', threshold: 5000, description: '5,000 shots fired' },
 ];
 
 export const AchievementCarousel: React.FC<AchievementCarouselProps> = ({ 
