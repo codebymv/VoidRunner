@@ -678,8 +678,10 @@ export const GameCanvas = () => {
     canvas.height = INTERNAL_HEIGHT;
     
     // Calculate display size (for CSS scaling later)
+    // Reserve space at bottom for UI elements (joystick, notifications, help button, captain dialog)
+    const UI_BOTTOM_SPACE = isMobile ? 300 : 180; // Space for joystick (120px) + notifications + dialogs + breathing room
     const availableWidth = window.innerWidth;
-    const availableHeight = isMobile ? window.innerHeight * 0.98 : window.innerHeight;
+    const availableHeight = (isMobile ? window.innerHeight * 0.98 : window.innerHeight) - UI_BOTTOM_SPACE;
     const aspectRatio = INTERNAL_WIDTH / INTERNAL_HEIGHT; // 16:9
     
     let displayWidth: number;
@@ -716,7 +718,9 @@ export const GameCanvas = () => {
         1.0, // No scaling - always 1920x1080
         {
           onScoreChange: (newScore: number) => {
-            setScore(newScore);
+            // DISABLED: GameEngine's absolute score updates cause race conditions
+            // Score is managed by GameCanvas's awardPoints() function and direct setScore() calls
+            // setScore(newScore);
           },
           onHealthChange: (newHealth: number) => {
             setHealth(newHealth);
@@ -743,6 +747,9 @@ export const GameCanvas = () => {
             setUnlimitedAmmoEndTime(endTime);
           },
           onShowToast: (message: string, points: number, options?: any) => {
+            // Award points AND show toast
+            // Use functional update to avoid race conditions with other score updates
+            setScore(prev => prev + points);
             priorityToast(message, points, options);
           },
           onShowPickupNotification: (message: string, className: string) => {
@@ -815,8 +822,10 @@ export const GameCanvas = () => {
 
     const handleResize = () => {
       // Recalculate CSS display size only (internal resolution stays 1920x1080)
+      // Reserve space at bottom for UI elements (joystick, notifications, help button, captain dialog)
+      const UI_BOTTOM_SPACE = isMobile ? 300 : 180; // Space for joystick (120px) + notifications + dialogs + breathing room
       const availableWidth = window.innerWidth;
-      const availableHeight = isMobile ? window.innerHeight * 0.98 : window.innerHeight;
+      const availableHeight = (isMobile ? window.innerHeight * 0.98 : window.innerHeight) - UI_BOTTOM_SPACE;
       const aspectRatio = INTERNAL_WIDTH / INTERNAL_HEIGHT;
       
       let displayWidth: number;
