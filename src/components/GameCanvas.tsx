@@ -590,38 +590,41 @@ export const GameCanvas = () => {
 
     const ctx = canvas.getContext("2d")!;
     
-    // === REFERENCE RESOLUTION SYSTEM ===
-    // Define 1920x1080 as "source of truth" for consistent gameplay across all screen sizes
-    const REFERENCE_WIDTH = 1920;
-    const REFERENCE_HEIGHT = 1080;
-    const REFERENCE_ASPECT = REFERENCE_WIDTH / REFERENCE_HEIGHT; // 16:9 = 1.777...
+    // === FIXED INTERNAL RESOLUTION SYSTEM ===
+    // Canvas ALWAYS runs at 1920x1080 internally for perfect 1:1 gameplay
+    // CSS handles scaling to fit any screen size
+    const INTERNAL_WIDTH = 1920;
+    const INTERNAL_HEIGHT = 1080;
     
-    // Calculate available space (accounting for UI margins)
-    const availableWidth = window.innerWidth * 0.9;
-    const availableHeight = isMobile ? window.innerHeight * 0.70 : window.innerHeight * 0.9;
-    const availableAspect = availableWidth / availableHeight;
+    // Lock canvas to fixed internal resolution
+    canvas.width = INTERNAL_WIDTH;
+    canvas.height = INTERNAL_HEIGHT;
     
-    // Maintain 16:9 aspect ratio, fit to available space
-    let canvasWidth: number;
-    let canvasHeight: number;
+    // Calculate display size (for CSS scaling later)
+    const availableWidth = window.innerWidth;
+    const availableHeight = isMobile ? window.innerHeight * 0.98 : window.innerHeight;
+    const aspectRatio = INTERNAL_WIDTH / INTERNAL_HEIGHT; // 16:9
     
-    if (availableAspect > REFERENCE_ASPECT) {
-      // Screen is wider than 16:9, constrain by height
-      canvasHeight = availableHeight;
-      canvasWidth = canvasHeight * REFERENCE_ASPECT;
+    let displayWidth: number;
+    let displayHeight: number;
+    
+    if (availableWidth / availableHeight > aspectRatio) {
+      // Screen wider than 16:9 - constrain by height
+      displayHeight = availableHeight;
+      displayWidth = displayHeight * aspectRatio;
     } else {
-      // Screen is taller than 16:9, constrain by width
-      canvasWidth = availableWidth;
-      canvasHeight = canvasWidth / REFERENCE_ASPECT;
+      // Screen taller/equal to 16:9 - constrain by width
+      displayWidth = availableWidth;
+      displayHeight = displayWidth / aspectRatio;
     }
     
-    // Set canvas to maintain reference aspect ratio
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
+    // Store display dimensions for CSS scaling
+    canvas.style.width = `${displayWidth}px`;
+    canvas.style.height = `${displayHeight}px`;
+    canvas.style.imageRendering = 'auto'; // Smooth scaling
     
-    // Calculate scale factor for assets (how much smaller/larger than reference)
-    const scaleFactor = canvasWidth / REFERENCE_WIDTH;
-    scaleFactorRef.current = scaleFactor; // Store for use in game logic
+    // Scale factor is always 1.0 (no asset scaling needed)
+    scaleFactorRef.current = 1.0;
 
     // Initialize StarField
     if (!starFieldRef.current) {
@@ -631,9 +634,9 @@ export const GameCanvas = () => {
     // Initialize GameEngine with callbacks
     if (!engineRef.current) {
       engineRef.current = new GameEngine(
-        canvas.width,
-        canvas.height,
-        scaleFactor, // Use resolution-based scale instead of mobile-only scale
+        INTERNAL_WIDTH,
+        INTERNAL_HEIGHT,
+        1.0, // No scaling - always 1920x1080
         {
           onScoreChange: (newScore: number) => {
             setScore(newScore);
@@ -728,50 +731,33 @@ export const GameCanvas = () => {
     }
 
     const game = gameRef.current;
-    game.ship.x = canvas.width / 2;
-    game.ship.y = canvas.height / 2;
-    game.ship.radius = 31 * scaleFactor; // Apply scale to ship radius
+    game.ship.x = INTERNAL_WIDTH / 2; // 960
+    game.ship.y = INTERNAL_HEIGHT / 2; // 540
+    game.ship.radius = 31; // Fixed size, no scaling
 
     const handleResize = () => {
-      // Recalculate canvas dimensions using reference resolution system
-      const REFERENCE_WIDTH = 1920;
-      const REFERENCE_HEIGHT = 1080;
-      const REFERENCE_ASPECT = REFERENCE_WIDTH / REFERENCE_HEIGHT;
+      // Recalculate CSS display size only (internal resolution stays 1920x1080)
+      const availableWidth = window.innerWidth;
+      const availableHeight = isMobile ? window.innerHeight * 0.98 : window.innerHeight;
+      const aspectRatio = INTERNAL_WIDTH / INTERNAL_HEIGHT;
       
-      const availableWidth = window.innerWidth * 0.9;
-      const availableHeight = isMobile ? window.innerHeight * 0.70 : window.innerHeight * 0.9;
-      const availableAspect = availableWidth / availableHeight;
+      let displayWidth: number;
+      let displayHeight: number;
       
-      let canvasWidth: number;
-      let canvasHeight: number;
-      
-      if (availableAspect > REFERENCE_ASPECT) {
-        canvasHeight = availableHeight;
-        canvasWidth = canvasHeight * REFERENCE_ASPECT;
+      if (availableWidth / availableHeight > aspectRatio) {
+        displayHeight = availableHeight;
+        displayWidth = displayHeight * aspectRatio;
       } else {
-        canvasWidth = availableWidth;
-        canvasHeight = canvasWidth / REFERENCE_ASPECT;
+        displayWidth = availableWidth;
+        displayHeight = displayWidth / aspectRatio;
       }
       
-      canvas.width = canvasWidth;
-      canvas.height = canvasHeight;
+      // Update CSS display dimensions
+      canvas.style.width = `${displayWidth}px`;
+      canvas.style.height = `${displayHeight}px`;
       
-      // Update scale factor
-      const scaleFactor = canvasWidth / REFERENCE_WIDTH;
-      scaleFactorRef.current = scaleFactor;
-      
-      // Update ship radius with new scale
-      game.ship.radius = 31 * scaleFactor;
-      
-      // Update StarField on resize
-      if (starFieldRef.current) {
-        starFieldRef.current.resize(canvas.width, canvas.height);
-      }
-      
-      // Update renderer dimensions
-      if (rendererRef.current) {
-        rendererRef.current.setDimensions(canvas.width, canvas.height);
-      }
+      // Internal canvas dimensions remain fixed at 1920x1080
+      // No need to update ship radius, StarField, or Renderer
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -799,8 +785,12 @@ export const GameCanvas = () => {
     };
 
     const handleMouseMove = (e: MouseEvent) => {
-      game.mouse.x = e.clientX;
-      game.mouse.y = e.clientY;
+      // Transform screen coordinates to internal 1920x1080 coordinates
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = INTERNAL_WIDTH / rect.width;
+      const scaleY = INTERNAL_HEIGHT / rect.height;
+      game.mouse.x = (e.clientX - rect.left) * scaleX;
+      game.mouse.y = (e.clientY - rect.top) * scaleY;
     };
 
     window.addEventListener("resize", handleResize);
@@ -849,7 +839,7 @@ export const GameCanvas = () => {
         x, y,
         vx: (canvas.width / 2 - x) * 0.0005,
         vy: (canvas.height / 2 - y) * 0.0005,
-        radius: (32 + Math.random() * 25) * scaleFactorRef.current, // Scaled to reference resolution
+        radius: 32 + Math.random() * 25, // Fixed size for 1920x1080
         mass: 1000 + Math.random() * 2000,
         color: colors[Math.floor(Math.random() * colors.length)],
         type: planetType
@@ -864,7 +854,7 @@ export const GameCanvas = () => {
         planet.vy *= 1.5;
         planet.rotation = 0;
         planet.rotationSpeed = 0.02 + Math.random() * 0.03; // Faster rotation than meteors
-        planet.radius = (26 + Math.random() * 18) * scaleFactorRef.current; // Scaled to reference resolution
+        planet.radius = 26 + Math.random() * 18; // Fixed size for 1920x1080
         planet.mass = 800 + Math.random() * 1500; // Less massive than regular planets
       } else if (planetType === "blackhole") {
         // Blackholes are larger, slower, with stronger gravity
@@ -872,7 +862,7 @@ export const GameCanvas = () => {
         planet.vy *= 0.3;
         planet.rotation = 0;
         planet.rotationSpeed = 0.01 + Math.random() * 0.02; // Slow, ominous rotation
-        planet.radius = (42 + Math.random() * 30) * scaleFactorRef.current; // Scaled to reference resolution
+        planet.radius = 42 + Math.random() * 30; // Fixed size for 1920x1080
         planet.mass = 2500 + Math.random() * 3000; // Much more massive
         planet.gravityMultiplier = 2.5 + Math.random() * 1.5; // 2.5x to 4x stronger gravity
         planet.color = "hsl(270, 50%, 20%)"; // Dark purple color
@@ -882,7 +872,7 @@ export const GameCanvas = () => {
         planet.vy *= 0.8;
         planet.rotation = 0;
         planet.rotationSpeed = 0.003 + Math.random() * 0.007; // Very slow rotation
-        planet.radius = (24 + Math.random() * 16) * scaleFactorRef.current; // Scaled to reference resolution
+        planet.radius = 24 + Math.random() * 16; // Fixed size for 1920x1080
         planet.mass = 600 + Math.random() * 1000; // Lighter than regular planets
         planet.canBounce = true;
         planet.bounceCount = 0;
@@ -901,7 +891,7 @@ export const GameCanvas = () => {
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
         vx: 0, vy: 0,
-        radius: 9 * scaleFactorRef.current,
+        radius: 9,
         collected: false,
         pulsePhase: Math.random() * Math.PI * 2 // Start at a random phase
       });
@@ -918,7 +908,7 @@ export const GameCanvas = () => {
       game.healthWrenches.push({
         x, y,
         vx: 0, vy: 0,
-        radius: 24 * scaleFactorRef.current, // Scaled to reference resolution
+        radius: 24, // Fixed size for 1920x1080
         collected: false,
         pulsePhase: 0
       });
@@ -935,7 +925,7 @@ export const GameCanvas = () => {
       game.voidWipes.push({
         x, y,
         vx: 0, vy: 0,
-        radius: 28 * scaleFactorRef.current, // Scaled to reference resolution
+        radius: 28, // Fixed size for 1920x1080
         collected: false,
         pulsePhase: 0
       });
@@ -1100,7 +1090,7 @@ export const GameCanvas = () => {
         if (autoShootNow - lastAutoShotTimeRef.current > AUTO_FIRE_RATE) {
           if (isUnlimitedAmmo || ammo > 0) {
             // Find nearest enemy
-            const target = findNearestEnemy(game.ship, game.planets, 400 * scaleFactorRef.current);
+            const target = findNearestEnemy(game.ship, game.planets, 400);
             
             if (target) {
               // Calculate lead shot for moving targets
@@ -1265,7 +1255,7 @@ export const GameCanvas = () => {
               y: planet.y + (Math.random() - 0.5) * 20,
               vx: (Math.random() - 0.5) * 1.5, // Small random velocity
               vy: (Math.random() - 0.5) * 1.5,
-              radius: (8 + Math.random() * 6) * scaleFactorRef.current, // Scaled to reference resolution
+              radius: 8 + Math.random() * 6, // Fixed size for 1920x1080
               lifespan: scrapLifespan,
               maxLifespan: scrapLifespan,
               rotation: Math.random() * Math.PI * 2,
@@ -1533,7 +1523,7 @@ export const GameCanvas = () => {
           const dx = star.x - game.ship.x;
           const dy = star.y - game.ship.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          const acquisitionRadius = 40 * scaleFactorRef.current; // Scaled to reference resolution
+          const acquisitionRadius = 40; // Fixed size for 1920x1080
           if (dist < acquisitionRadius) {
             star.collected = true;
             createParticles(star.x, star.y, "hsl(60, 100%, 50%)", 15);
@@ -1565,7 +1555,7 @@ export const GameCanvas = () => {
           const dx = wrench.x - game.ship.x;
           const dy = wrench.y - game.ship.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          const acquisitionRadius = 40 * scaleFactorRef.current; // Scaled to reference resolution
+          const acquisitionRadius = 40; // Fixed size for 1920x1080
           if (dist < acquisitionRadius) {
             wrench.collected = true;
             playSound('healthWrench');
@@ -1811,7 +1801,7 @@ export const GameCanvas = () => {
 
       // Spawn ammo power-ups (ship level 2+ only)
       if (shouldSpawnAmmoPowerUp(now, game.lastAmmoPowerUpSpawn, hasWeapon)) {
-        const ammoPowerUp = createAmmoPowerUp(canvas.width, canvas.height, scaleFactorRef.current, game.ship.x, game.ship.y);
+        const ammoPowerUp = createAmmoPowerUp(canvas.width, canvas.height, 1.0, game.ship.x, game.ship.y);
         game.ammoPowerUps.push(ammoPowerUp);
         game.lastAmmoPowerUpSpawn = now;
       }
@@ -1942,7 +1932,7 @@ export const GameCanvas = () => {
       }}
     >
       {/* Game Area Container */}
-      <div className={`flex flex-col items-center w-full h-full p-1 sm:p-2 md:p-4 ${isMobile ? 'justify-start pb-[15vh]' : 'justify-center'}`}>
+      <div className="flex flex-col items-center w-full h-full p-0 justify-start">
         {/* Game HUD - Extracted Component */}
         {gameState === "playing" && (
           <GameHUD
@@ -2021,6 +2011,17 @@ export const GameCanvas = () => {
         onMove={handleJoystickInput}
         isVisible={gameState === "playing" && (isMobile || showJoystick)}
       />
+      
+      {/* Floating Help Button - Desktop only, bottom right */}
+      {gameState === "playing" && !isMobile && (
+        <button
+          onClick={() => setShowHelp(!showHelp)}
+          className="fixed bottom-1 right-1 w-12 h-12 rounded-full bg-primary/20 border-2 border-primary/30 text-primary hover:bg-primary/30 transition-colors flex items-center justify-center text-2xl font-bold z-[70] shadow-lg"
+          style={{ backdropFilter: 'blur(8px)' }}
+        >
+          ?
+        </button>
+      )}
       
       {/* Captain Dialog */}
       <CaptainDialog

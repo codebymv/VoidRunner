@@ -54,27 +54,27 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   return (
     <>
       {/* UI Header - Responsive Layout */}
-      <div className="w-full max-w-6xl mb-1 sm:mb-2 md:mb-4">
+      <div className="w-full max-w-6xl mb-0">
         {isMobile ? (
           /* Mobile Layout - Stacked */
-          <div className="space-y-2 sm:space-y-3">
+          <div className="space-y-0.5">
             {/* Top Row - Logo, Help, and Score */}
-            <div className="flex items-center justify-between px-1 sm:px-2">
+            <div className="flex items-center justify-between px-0.5 sm:px-1">
               <img 
                 src={logoImage} 
                 alt="Game Logo" 
-                className="h-6 sm:h-8 w-auto object-contain" 
+                className="h-5 sm:h-6 w-auto object-contain" 
               />
               
               {/* Center section with High Score and Current Score */}
-              <div className="flex flex-col items-center gap-0.5 sm:gap-1">
+              <div className="flex flex-col items-center gap-0">
                 {highScore > 0 && (
                   <div className="text-xs sm:text-sm text-accent glow-blue">
                     High Score: {highScore}
                   </div>
                 )}
                 {/* Score and Difficulty on same row */}
-                <div className="flex items-center gap-2 sm:gap-3">
+                <div className="flex items-center gap-1 sm:gap-2">
                   <div className={`text-xl sm:text-2xl md:text-3xl font-bold transition-colors duration-300 ${
                     score > highScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'
                   }`}>
@@ -95,7 +95,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               </div>
               
               {/* Help Icon and Hamburger Menu */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 <button
                   onClick={onToggleHelp}
                   className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 text-primary hover:bg-primary/30 transition-colors flex items-center justify-center text-lg font-bold z-[70]"
@@ -116,9 +116,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             </div>
             
             {/* Bottom Row - Health, Shield, and Pause */}
-            <div className="flex items-center justify-between px-1 sm:px-2">
+            <div className="flex items-center justify-between px-0.5 sm:px-1">
               {/* Health and Shield */}
-              <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1 sm:gap-2">
                 {/* Health Bar */}
                 <div className="flex items-center gap-1 sm:gap-2">
                   <img src={redCrossSprite} alt="Health" className="w-4 sm:w-5 h-4 sm:h-5 drop-shadow-lg" style={{filter: 'drop-shadow(0 0 4px #00ffff)'}} />
@@ -218,19 +218,19 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           /* Desktop Layout - Single Row */
           <div className="flex items-center justify-between px-2">
             {/* Left side - Logo and Score */}
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
               <img 
                 src={logoImage} 
                 alt="Game Logo" 
-                className="h-10 w-auto object-contain" 
+                className="h-6 w-auto object-contain" 
               />
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
                 {highScore > 0 && (
                   <div className="flex flex-col items-center">
                     <div className="text-xs text-accent glow-blue opacity-80">
                       High Score
                     </div>
-                    <div className="text-xl font-bold text-accent glow-blue">
+                    <div className="text-lg font-bold text-accent glow-blue">
                       {highScore}
                     </div>
                   </div>
@@ -239,8 +239,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                   <div className="text-xs text-blue-400 glow-blue opacity-80">
                     Score
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className={`text-3xl font-bold transition-colors duration-300 ${
+                  <div className="flex items-center gap-1">
+                    <div className={`text-2xl font-bold transition-colors duration-300 ${
                       score > highScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'
                     } text-glow`}>
                       {score}
@@ -262,7 +262,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             </div>
             
             {/* Right side - Health, Shield, Ammo, and Menu */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5">
               <img src={redCrossSprite} alt="Health" className="w-6 h-6 drop-shadow-lg" style={{filter: 'drop-shadow(0 0 4px #00ffff)'}} />
               <div className="relative w-32 h-3 bg-black/50 rounded-full border border-primary/30">
                 <div 
@@ -356,7 +356,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           {isMobile ? (
             <p>Use joystick to move • Tap pause button to pause</p>
           ) : (
-            <p>WASD/Arrow Keys: Move • Mouse: Aim • Escape: Pause</p>
+            <p>WASD/Arrow Keys: Move • Space: Shoot • Escape: Pause</p>
           )}
         </div>
       )}

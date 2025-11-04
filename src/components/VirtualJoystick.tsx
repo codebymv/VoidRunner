@@ -32,7 +32,7 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove, isVisi
   };
 
   return (
-    <div className="fixed bottom-8 left-8 z-50">
+    <div className="fixed bottom-1 left-1 z-50">
       <Joystick
         size={120}
         stickSize={70}
