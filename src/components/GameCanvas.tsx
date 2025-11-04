@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "./ui/button";
+import { MainMenu } from "./ui/MainMenu";
+import { PauseMenu } from "./ui/PauseMenu";
+import { GameOverMenu } from "./ui/GameOverMenu";
+import { GameHUD } from "./ui/GameHUD";
 import { priorityToast, toastManager, formatToastWithCombo } from "@/utils/toastPriority";
 import { showPickupNotification } from "./PickupNotification";
 import { StarField } from "@/utils/StarField";
@@ -28,15 +32,16 @@ import scrapSprite from "@/assets/debris_scrap.png";
 import redCrossSprite from "@/assets/red_cross.png";
 import shieldSprite from "@/assets/shield.svg";
 import logoImage from "@/assets/logo.png";
-import gameOverImage from "@/assets/game_over.png";
 import speech1Audio from "@/assets/speech1.mp3";
 import speech2Audio from "@/assets/speech2.mp3";
 import unlimitedAmmoImage from '@/assets/unlimited_ammo.png';
-import trophyImage from '@/assets/trophy.png';
+import voidWipeSprite from '@/assets/void_wipe.png';
 import { createBullet, updateBullets, checkBulletPlanetCollision, checkBulletScrapCollision, calculateDamage, getMaxHealth, FIRE_RATE, AUTO_FIRE_RATE, AMMO_DRAIN_RATE, RECHARGE_TIME, BULLET_SPEED } from "@/utils/shooting";
 import { renderBullets } from "@/utils/bulletRenderer";
 import { createAmmoPowerUp, shouldSpawnAmmoPowerUp, renderAmmoPowerUp, UNLIMITED_AMMO_DURATION } from "@/utils/ammoPowerUpSpawning";
 import { findNearestEnemy, calculateLeadShot } from "@/utils/autoTargeting";
+import { GameEngine } from "@/game/GameEngine";
+import { Renderer } from "@/game/Renderer";
 
 interface GameObject {
   x: number;
@@ -64,6 +69,7 @@ interface Planet extends GameObject {
 
 interface Star extends GameObject {
   collected: boolean;
+  pulsePhase?: number;
 }
 
 interface ShipTrail {
@@ -124,6 +130,7 @@ export const GameCanvas = () => {
   const starUpgrade2Img = useRef<HTMLImageElement>(null!);
   const healthWrenchImg = useRef<HTMLImageElement>(null!);
   const unlimitedAmmoImg = useRef<HTMLImageElement>(null!);
+  const voidWipeImg = useRef<HTMLImageElement>(null!);
   const starFieldRef = useRef<StarField | null>(null);
   const [gameState, setGameState] = useState<"menu" | "playing" | "paused" | "gameover">("menu");
   const [score, setScore] = useState(0);
@@ -244,6 +251,17 @@ export const GameCanvas = () => {
     difficultyManager.setDifficulty(difficulty, true);
     setCurrentDifficulty(difficulty);
   }, []);
+
+  const handleResume = useCallback(() => {
+    playMenuClose().catch(console.error);
+    AudioManager.getInstance().startShipEngineLoops();
+    setGameState("playing");
+  }, [playMenuClose]);
+
+  const handleMainMenu = useCallback(() => {
+    playMenuClose().catch(console.error);
+    setGameState("menu");
+  }, [playMenuClose]);
 
    // Handle joystick input with useCallback for stable reference
    const handleJoystickInput = useCallback((input: { x: number; y: number }) => {
@@ -406,11 +424,11 @@ export const GameCanvas = () => {
     }
   };
   
-  // Mobile scaling factor for fairer gameplay
-  const mobileScaleFactor = isMobile ? 0.75 : 1.0;
+  // Scale factor ref for resolution-based scaling (1920x1080 as reference)
+  const scaleFactorRef = useRef(1.0);
   
   const gameRef = useRef({
-    ship: { x: 0, y: 0, vx: 0, vy: 0, radius: 28 * mobileScaleFactor, angle: 0 },
+    ship: { x: 0, y: 0, vx: 0, vy: 0, radius: 31, angle: 0 }, // Base size, will be scaled by scaleFactor
     planets: [] as Planet[],
     stars: [] as Star[],
     scraps: [] as Scrap[],
@@ -419,12 +437,15 @@ export const GameCanvas = () => {
     shipTrails: [] as ShipTrail[],
     bullets: [] as Bullet[],
     ammoPowerUps: [] as AmmoPowerUp[],
+    voidWipes: [] as any[], // VoidWipe type
     keys: {} as Record<string, boolean>,
     mouse: { x: 0, y: 0 },
     lastPlanetSpawn: 0,
     lastStarSpawn: 0,
     lastAmmoPowerUpSpawn: 0,
     lastHealthWrenchSpawn: 0,
+    lastVoidWipeSpawn: 0,
+    lastVoidWipeCollected: 0, // Track when void wipe was collected for respite period
     gameStartTime: 0,
     difficulty: 1,
     invulnerable: 0,
@@ -434,6 +455,12 @@ export const GameCanvas = () => {
     comboCount: 0, // Track consecutive scoring actions
     lastComboTime: 0, // Track when last combo action happened
   });
+
+  // GameEngine instance for testing particle updates
+  const engineRef = useRef<GameEngine | null>(null);
+  
+  // Renderer instance for handling all canvas drawing
+  const rendererRef = useRef<Renderer | null>(null);
 
   useEffect(() => {
     const idleImg = new Image();
@@ -499,6 +526,10 @@ export const GameCanvas = () => {
     const unlimitedAmmo = new Image();
     unlimitedAmmo.src = unlimitedAmmoImage;
     unlimitedAmmoImg.current = unlimitedAmmo;
+
+    const voidWipe = new Image();
+    voidWipe.src = voidWipeSprite;
+    voidWipeImg.current = voidWipe;
   }, []);
 
   // Sync game state with audio system
@@ -558,36 +589,188 @@ export const GameCanvas = () => {
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d")!;
-    // Make canvas responsive - smaller on mobile to leave room for UI and joystick
-    canvas.width = window.innerWidth * 0.9;
-    if (isMobile) {
-      // On mobile, use slightly smaller canvas to create space between game area and joystick
-      canvas.height = window.innerHeight * 0.70;
+    
+    // === REFERENCE RESOLUTION SYSTEM ===
+    // Define 1920x1080 as "source of truth" for consistent gameplay across all screen sizes
+    const REFERENCE_WIDTH = 1920;
+    const REFERENCE_HEIGHT = 1080;
+    const REFERENCE_ASPECT = REFERENCE_WIDTH / REFERENCE_HEIGHT; // 16:9 = 1.777...
+    
+    // Calculate available space (accounting for UI margins)
+    const availableWidth = window.innerWidth * 0.9;
+    const availableHeight = isMobile ? window.innerHeight * 0.70 : window.innerHeight * 0.9;
+    const availableAspect = availableWidth / availableHeight;
+    
+    // Maintain 16:9 aspect ratio, fit to available space
+    let canvasWidth: number;
+    let canvasHeight: number;
+    
+    if (availableAspect > REFERENCE_ASPECT) {
+      // Screen is wider than 16:9, constrain by height
+      canvasHeight = availableHeight;
+      canvasWidth = canvasHeight * REFERENCE_ASPECT;
     } else {
-      canvas.height = window.innerHeight * 0.9;
+      // Screen is taller than 16:9, constrain by width
+      canvasWidth = availableWidth;
+      canvasHeight = canvasWidth / REFERENCE_ASPECT;
     }
+    
+    // Set canvas to maintain reference aspect ratio
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    
+    // Calculate scale factor for assets (how much smaller/larger than reference)
+    const scaleFactor = canvasWidth / REFERENCE_WIDTH;
+    scaleFactorRef.current = scaleFactor; // Store for use in game logic
 
     // Initialize StarField
     if (!starFieldRef.current) {
       starFieldRef.current = new StarField(canvas);
     }
 
+    // Initialize GameEngine with callbacks
+    if (!engineRef.current) {
+      engineRef.current = new GameEngine(
+        canvas.width,
+        canvas.height,
+        scaleFactor, // Use resolution-based scale instead of mobile-only scale
+        {
+          onScoreChange: (newScore: number) => {
+            setScore(newScore);
+          },
+          onHealthChange: (newHealth: number) => {
+            setHealth(newHealth);
+          },
+          onShieldChange: (newShield: number) => {
+            setShield(newShield);
+          },
+          onGameOver: () => {
+            setGameState("gameover");
+          },
+          onShipUpgrade: (level: 2 | 3) => {
+            // Upgrades now handled in game loop to match original behavior
+            // This callback kept for GameEngine compatibility but not used
+          },
+          onAmmoChange: (newAmmo: number) => {
+            setAmmo(newAmmo);
+          },
+          onRechargeStateChange: (isRecharging: boolean) => {
+            setIsRecharging(isRecharging);
+          },
+          onUnlimitedAmmoChange: (isUnlimited: boolean, endTime: number) => {
+            setIsUnlimitedAmmo(isUnlimited);
+            setUnlimitedAmmoEndTime(endTime);
+          },
+          onShowToast: (message: string, points: number, options?: any) => {
+            priorityToast(message, points, options);
+          },
+          onShowPickupNotification: (message: string, className: string) => {
+            showPickupNotification(message, className);
+          },
+          onPlaySound: (soundName: string) => {
+            // Sound playback handled via AudioManager globally
+            console.log("Play sound:", soundName);
+          },
+          onHealthGlow: (duration: number) => {
+            healthGlowEndTimeRef.current = Date.now() + duration;
+          },
+          onCreateParticles: (x: number, y: number, color: string, count: number) => {
+            // Particles will be created by startGame's createParticles function
+            // We'll wire this up properly later in the refactor
+            const game = gameRef.current;
+            for (let i = 0; i < count; i++) {
+              const angle = Math.random() * Math.PI * 2;
+              const speed = 2 + Math.random() * 3;
+              game.particles.push({
+                x, y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                life: 1,
+                color
+              });
+            }
+          },
+          onCreateExplosion: (x: number, y: number, blastRadius: number, force: number, excludeIndices: number[]) => {
+            // This will be wired up to the createExplosion function in startGame
+            // For now, just log it - we'll connect it properly below
+            console.log("Explosion callback:", x, y, blastRadius, force, excludeIndices);
+          },
+        }
+      );
+    }
+    
+    // Initialize Renderer
+    if (!rendererRef.current) {
+      rendererRef.current = new Renderer();
+      rendererRef.current.setDimensions(canvas.width, canvas.height);
+      rendererRef.current.setStarField(starFieldRef.current!);
+      // Pass image refs to renderer
+      rendererRef.current.setImages({
+        shipIdle: shipIdleImg.current,
+        shipThrust: shipThrustImg.current,
+        ship2Idle: ship2IdleImg.current,
+        ship2Thrust: ship2ThrustImg.current,
+        ship3Idle: ship3IdleImg.current,
+        ship3Thrust: ship3ThrustImg.current,
+        meteor: meteorImg.current,
+        planet2: planet2Img.current,
+        blackhole: blackholeImg.current,
+        debris: debrisImg.current,
+        scrap: scrapImg.current,
+        star: starImg.current,
+        starUpgrade: starUpgradeImg.current,
+        starUpgrade2: starUpgrade2Img.current,
+        healthWrench: healthWrenchImg.current,
+        unlimitedAmmo: unlimitedAmmoImg.current,
+        voidWipe: voidWipeImg.current,
+        shield: new Image(), // TODO: Add shield image ref
+      });
+    }
+
     const game = gameRef.current;
     game.ship.x = canvas.width / 2;
     game.ship.y = canvas.height / 2;
+    game.ship.radius = 31 * scaleFactor; // Apply scale to ship radius
 
     const handleResize = () => {
-      canvas.width = window.innerWidth * 0.9;
-      if (isMobile) {
-        // On mobile, use slightly smaller canvas to create space between game area and joystick
-        canvas.height = window.innerHeight * 0.70;
+      // Recalculate canvas dimensions using reference resolution system
+      const REFERENCE_WIDTH = 1920;
+      const REFERENCE_HEIGHT = 1080;
+      const REFERENCE_ASPECT = REFERENCE_WIDTH / REFERENCE_HEIGHT;
+      
+      const availableWidth = window.innerWidth * 0.9;
+      const availableHeight = isMobile ? window.innerHeight * 0.70 : window.innerHeight * 0.9;
+      const availableAspect = availableWidth / availableHeight;
+      
+      let canvasWidth: number;
+      let canvasHeight: number;
+      
+      if (availableAspect > REFERENCE_ASPECT) {
+        canvasHeight = availableHeight;
+        canvasWidth = canvasHeight * REFERENCE_ASPECT;
       } else {
-        canvas.height = window.innerHeight * 0.9;
+        canvasWidth = availableWidth;
+        canvasHeight = canvasWidth / REFERENCE_ASPECT;
       }
+      
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+      
+      // Update scale factor
+      const scaleFactor = canvasWidth / REFERENCE_WIDTH;
+      scaleFactorRef.current = scaleFactor;
+      
+      // Update ship radius with new scale
+      game.ship.radius = 31 * scaleFactor;
       
       // Update StarField on resize
       if (starFieldRef.current) {
         starFieldRef.current.resize(canvas.width, canvas.height);
+      }
+      
+      // Update renderer dimensions
+      if (rendererRef.current) {
+        rendererRef.current.setDimensions(canvas.width, canvas.height);
       }
     };
 
@@ -666,7 +849,7 @@ export const GameCanvas = () => {
         x, y,
         vx: (canvas.width / 2 - x) * 0.0005,
         vy: (canvas.height / 2 - y) * 0.0005,
-        radius: (32 + Math.random() * 25) * mobileScaleFactor, // Increased from 25 + 20
+        radius: (32 + Math.random() * 25) * scaleFactorRef.current, // Scaled to reference resolution
         mass: 1000 + Math.random() * 2000,
         color: colors[Math.floor(Math.random() * colors.length)],
         type: planetType
@@ -681,7 +864,7 @@ export const GameCanvas = () => {
         planet.vy *= 1.5;
         planet.rotation = 0;
         planet.rotationSpeed = 0.02 + Math.random() * 0.03; // Faster rotation than meteors
-        planet.radius = (26 + Math.random() * 18) * mobileScaleFactor; // Increased from 20 + 15
+        planet.radius = (26 + Math.random() * 18) * scaleFactorRef.current; // Scaled to reference resolution
         planet.mass = 800 + Math.random() * 1500; // Less massive than regular planets
       } else if (planetType === "blackhole") {
         // Blackholes are larger, slower, with stronger gravity
@@ -689,7 +872,7 @@ export const GameCanvas = () => {
         planet.vy *= 0.3;
         planet.rotation = 0;
         planet.rotationSpeed = 0.01 + Math.random() * 0.02; // Slow, ominous rotation
-        planet.radius = (42 + Math.random() * 30) * mobileScaleFactor; // Increased from 35 + 25
+        planet.radius = (42 + Math.random() * 30) * scaleFactorRef.current; // Scaled to reference resolution
         planet.mass = 2500 + Math.random() * 3000; // Much more massive
         planet.gravityMultiplier = 2.5 + Math.random() * 1.5; // 2.5x to 4x stronger gravity
         planet.color = "hsl(270, 50%, 20%)"; // Dark purple color
@@ -699,7 +882,7 @@ export const GameCanvas = () => {
         planet.vy *= 0.8;
         planet.rotation = 0;
         planet.rotationSpeed = 0.003 + Math.random() * 0.007; // Very slow rotation
-        planet.radius = (24 + Math.random() * 16) * mobileScaleFactor; // Increased from 18 + 12
+        planet.radius = (24 + Math.random() * 16) * scaleFactorRef.current; // Scaled to reference resolution
         planet.mass = 600 + Math.random() * 1000; // Lighter than regular planets
         planet.canBounce = true;
         planet.bounceCount = 0;
@@ -718,7 +901,7 @@ export const GameCanvas = () => {
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
         vx: 0, vy: 0,
-        radius: 6 * mobileScaleFactor,
+        radius: 9 * scaleFactorRef.current,
         collected: false,
         pulsePhase: Math.random() * Math.PI * 2 // Start at a random phase
       });
@@ -735,7 +918,24 @@ export const GameCanvas = () => {
       game.healthWrenches.push({
         x, y,
         vx: 0, vy: 0,
-        radius: 20 * mobileScaleFactor, // Slightly larger than stars for visibility
+        radius: 24 * scaleFactorRef.current, // Scaled to reference resolution
+        collected: false,
+        pulsePhase: 0
+      });
+    };
+
+    const spawnVoidWipe = () => {
+      // Spawn away from ship to avoid instant collection
+      let x, y;
+      do {
+        x = Math.random() * canvas.width;
+        y = Math.random() * canvas.height;
+      } while (Math.sqrt((x - game.ship.x) ** 2 + (y - game.ship.y) ** 2) < 200);
+
+      game.voidWipes.push({
+        x, y,
+        vx: 0, vy: 0,
+        radius: 28 * scaleFactorRef.current, // Scaled to reference resolution
         collected: false,
         pulsePhase: 0
       });
@@ -799,6 +999,11 @@ export const GameCanvas = () => {
       });
     };
 
+    // Wire up explosion callback to GameEngine now that createExplosion is defined
+    if (engineRef.current) {
+      engineRef.current.callbacks.onCreateExplosion = createExplosion;
+    }
+
     const gameLoop = () => {
       const now = Date.now();
       const delta = (now - lastTime) / 16.67;
@@ -807,26 +1012,7 @@ export const GameCanvas = () => {
       // Update toast threshold based on current score to reduce notification spam in late game
       toastManager.updateThreshold(score);
 
-      ctx.fillStyle = "rgb(10, 10, 20)"; // Solid background to prevent trails
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Render StarField background
-      if (starFieldRef.current) {
-        starFieldRef.current.setCameraPosition(game.ship.x, game.ship.y);
-        starFieldRef.current.update(delta);
-        starFieldRef.current.render();
-      }
-
-      if (game.shake > 0) {
-        ctx.save();
-        ctx.translate(
-          (Math.random() - 0.5) * game.shake,
-          (Math.random() - 0.5) * game.shake
-        );
-        game.shake *= 0.9;
-      }
-
-      // Ship controls
+      // Ship controls - calculate isAccelerating before rendering
       const speed = 0.3;
       // Mobile-optimized speeds - much slower for small screen control
       // Mobile: Much slower multiplier (0.15) - slower than keyboard for precise control
@@ -848,6 +1034,28 @@ export const GameCanvas = () => {
         game.ship.vx += currentJoystick.x * joystickSpeed;
         game.ship.vy += currentJoystick.y * joystickSpeed;
         isAccelerating = true;
+      }
+
+      // === Phases 2-8: Background, particles, bullets, planets, stars, pickups, and ship now handled by Renderer ===
+      if (rendererRef.current) {
+        rendererRef.current.render(ctx, game, { 
+          delta, 
+          isUnlimitedAmmo, 
+          score,
+          health,
+          shield,
+          isAccelerating,
+          healthGlowEndTimeRef: healthGlowEndTimeRef.current
+        });
+      }
+
+      if (game.shake > 0) {
+        ctx.save();
+        ctx.translate(
+          (Math.random() - 0.5) * game.shake,
+          (Math.random() - 0.5) * game.shake
+        );
+        game.shake *= 0.9;
       }
 
       // Update ship engine state based on acceleration (crossfade idle/thrust loops)
@@ -892,7 +1100,7 @@ export const GameCanvas = () => {
         if (autoShootNow - lastAutoShotTimeRef.current > AUTO_FIRE_RATE) {
           if (isUnlimitedAmmo || ammo > 0) {
             // Find nearest enemy
-            const target = findNearestEnemy(game.ship, game.planets, 400 * mobileScaleFactor);
+            const target = findNearestEnemy(game.ship, game.planets, 400 * scaleFactorRef.current);
             
             if (target) {
               // Calculate lead shot for moving targets
@@ -932,7 +1140,7 @@ export const GameCanvas = () => {
           setIsRecharging(false);
           playSound('chargeReady').catch(() => {}); // Ammo ready sound
         } else {
-          setAmmo(Math.floor(rechargeProgress * maxAmmo));
+          setAmmo(rechargeProgress * maxAmmo);
         }
       }
       // Passive ammo regeneration (when not empty and not unlimited)
@@ -958,81 +1166,54 @@ export const GameCanvas = () => {
       // Update bullets
       game.bullets = updateBullets(game.bullets, delta);
 
-      // Gravity from planets
-      game.planets.forEach(planet => {
-        const dx = planet.x - game.ship.x;
-        const dy = planet.y - game.ship.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 0) {
-          const baseForce = planet.mass / (dist * dist);
-          // Apply enhanced gravity for blackholes
-          const gravityMultiplier = planet.gravityMultiplier || 1;
-          const force = baseForce * gravityMultiplier;
-          game.ship.vx += (dx / dist) * force * 0.01;
-          game.ship.vy += (dy / dist) * force * 0.01;
-        }
-      });
-
-      // Apply friction
-      game.ship.vx *= 0.98;
-      game.ship.vy *= 0.98;
-
-      // Update ship angle based on velocity direction
-      const velocityMagnitude = Math.sqrt(game.ship.vx * game.ship.vx + game.ship.vy * game.ship.vy);
-      if (velocityMagnitude > 0.5) {
-        game.ship.angle = Math.atan2(game.ship.vy, game.ship.vx);
+      // === TESTING: Delegate ALL ship physics to GameEngine ===
+      // Apply gravity, friction, rotation, then position update in engine
+      if (engineRef.current) {
+        engineRef.current.setShip(game.ship);
+        engineRef.current.setPlanets(game.planets);
+        engineRef.current.updateShipGravityOnly();
+        engineRef.current.updateShipFrictionOnly();
+        engineRef.current.updateShipRotationOnly();
+        engineRef.current.updateShipPositionOnly(delta);
+        // Sync entire ship state back after all physics
+        const engineStateAfterPhysics = engineRef.current.getState();
+        game.ship.x = engineStateAfterPhysics.ship.x;
+        game.ship.y = engineStateAfterPhysics.ship.y;
+        game.ship.vx = engineStateAfterPhysics.ship.vx;
+        game.ship.vy = engineStateAfterPhysics.ship.vy;
+        game.ship.angle = engineStateAfterPhysics.ship.angle;
       }
 
-      // Update ship
-      game.ship.x += game.ship.vx * delta;
-      game.ship.y += game.ship.vy * delta;
-
-      // Add ship trail when moving
-      if (velocityMagnitude > 0.5) {
-        game.shipTrails.push({
-          x: game.ship.x,
-          y: game.ship.y,
-          life: 1.0
-        });
+      // Sync ship state and trails TO engine for trails/wrapping
+      if (engineRef.current) {
+        engineRef.current.setShip(game.ship);
+        engineRef.current.setShipTrails(game.shipTrails);
+        // Update trails in engine
+        engineRef.current.updateShipTrailsOnly();
+        // Update boundary wrapping in engine
+        engineRef.current.updateBoundaryWrapOnly();
+        // Sync updated ship position and trails FROM engine back to game
+        const engineState = engineRef.current.getState();
+        game.ship.x = engineState.ship.x;
+        game.ship.y = engineState.ship.y;
+        game.shipTrails = engineState.shipTrails;
       }
 
-      // Update and filter ship trails
-      game.shipTrails = game.shipTrails.filter(trail => {
-        trail.life -= 0.05;
-        return trail.life > 0;
-      });
-
-      // Limit trail length
-      if (game.shipTrails.length > 20) {
-        game.shipTrails.shift();
+      // === TESTING: Delegate planet updates to GameEngine ===
+      if (engineRef.current) {
+        engineRef.current.setPlanets(game.planets);
+        engineRef.current.updatePlanetsOnly(delta);
+        const engineState = engineRef.current.getState();
+        game.planets = engineState.planets;
       }
 
-      // Boundary wrap
-      if (game.ship.x < 0) game.ship.x = canvas.width;
-      if (game.ship.x > canvas.width) game.ship.x = 0;
-      if (game.ship.y < 0) game.ship.y = canvas.height;
-      if (game.ship.y > canvas.height) game.ship.y = 0;
-
-      // Update planets
-      game.planets = game.planets.filter(planet => {
-        planet.x += planet.vx * delta;
-        planet.y += planet.vy * delta;
-        
-        // Update rotation for meteors, planet2, blackholes, and debris
-        if ((planet.type === "meteor" || planet.type === "planet2" || planet.type === "blackhole" || planet.type === "debris") && planet.rotation !== undefined && planet.rotationSpeed !== undefined) {
-          planet.rotation += planet.rotationSpeed * delta;
-        }
-        
-        const isInBounds = planet.x > -100 && planet.x < canvas.width + 100 &&
-                          planet.y > -100 && planet.y < canvas.height + 100;
-        
-        // Clean up nearMissTracker for planets going out of bounds
-        if (!isInBounds) {
-          game.nearMissTracker.delete(planet.id);
-        }
-        
-        return isInBounds;
-      });
+      // === TESTING: Delegate debris collisions to GameEngine (Phase 1) ===
+      if (engineRef.current) {
+        engineRef.current.setPlanets(game.planets);
+        engineRef.current.updateDebrisCollisionsOnly();
+        const engineState = engineRef.current.getState();
+        game.planets = engineState.planets;
+      }
 
       // Check for oversized black holes that should disappear
       game.planets = game.planets.filter(planet => {
@@ -1052,19 +1233,7 @@ export const GameCanvas = () => {
             createParticles(planet.x, planet.y, "hsl(60, 100%, 80%)", 30); // Golden energy
             createExplosion(planet.x, planet.y, megaBlastRadius, megaBlastForce, []);
             
-            // Add score bonus for witnessing black hole collapse
-            setScore(prev => {
-              const newScore = prev + 500;
-              const isNewHighScore = newScore > highScore;
-              
-              // Show toast with dynamic color based on high score status
-              priorityToast("Black hole collapsed! +500 points", 500, { 
-                duration: 3000,
-                className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
-              });
-              
-              return newScore;
-            });
+            // Score bonus handled by GameEngine
             
             // Clean up nearMissTracker for removed planet
             game.nearMissTracker.delete(planet.id);
@@ -1096,7 +1265,7 @@ export const GameCanvas = () => {
               y: planet.y + (Math.random() - 0.5) * 20,
               vx: (Math.random() - 0.5) * 1.5, // Small random velocity
               vy: (Math.random() - 0.5) * 1.5,
-              radius: (8 + Math.random() * 6) * mobileScaleFactor, // Small size (8-14 pixels)
+              radius: (8 + Math.random() * 6) * scaleFactorRef.current, // Scaled to reference resolution
               lifespan: scrapLifespan,
               maxLifespan: scrapLifespan,
               rotation: Math.random() * Math.PI * 2,
@@ -1135,66 +1304,7 @@ export const GameCanvas = () => {
                scrap.y > -50 && scrap.y < canvas.height + 50;
       });
 
-      // Debris collision detection and bouncing
-      game.planets.forEach((debris, debrisIndex) => {
-        if (debris.type === "debris" && debris.canBounce && debris.bounceCount < 3) {
-          game.planets.forEach((otherPlanet, otherIndex) => {
-            if (debrisIndex !== otherIndex) {
-              const dx = debris.x - otherPlanet.x;
-              const dy = debris.y - otherPlanet.y;
-              const dist = Math.sqrt(dx * dx + dy * dy);
-              const minDist = debris.radius + otherPlanet.radius;
-              
-              if (dist < minDist && dist > 0) {
-                // Calculate bounce direction
-                const normalX = dx / dist;
-                const normalY = dy / dist;
-                
-                // Separate the objects
-                const overlap = minDist - dist;
-                debris.x += normalX * overlap * 0.5;
-                debris.y += normalY * overlap * 0.5;
-                otherPlanet.x -= normalX * overlap * 0.5;
-                otherPlanet.y -= normalY * overlap * 0.5;
-                
-                // Calculate relative velocity
-                const relativeVx = debris.vx - otherPlanet.vx;
-                const relativeVy = debris.vy - otherPlanet.vy;
-                const relativeSpeed = relativeVx * normalX + relativeVy * normalY;
-                
-                if (relativeSpeed < 0) return; // Objects separating
-                
-                // Apply bounce with energy loss
-                const bounceStrength = 0.8; // Energy loss factor
-                const impulse = 2 * relativeSpeed / (debris.mass + otherPlanet.mass);
-                
-                debris.vx -= impulse * otherPlanet.mass * normalX * bounceStrength;
-                debris.vy -= impulse * otherPlanet.mass * normalY * bounceStrength;
-                otherPlanet.vx += impulse * debris.mass * normalX * bounceStrength;
-                otherPlanet.vy += impulse * debris.mass * normalY * bounceStrength;
-                
-                debris.bounceCount++;
-                
-                // Award points for debris-debris collision
-                setScore(prev => {
-                  const newScore = prev + 20;
-                  const isNewHighScore = newScore > highScore;
-                  
-                  priorityToast("Debris collision! +20 points", 20, { 
-                    duration: 1000,
-                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
-                  });
-                  
-                  return newScore;
-                });
-                
-                // Create particles for visual effect
-                createParticles(debris.x, debris.y, "hsl(30, 70%, 60%)", 8);
-              }
-            }
-          });
-        }
-      });
+      // Debris collision detection - NOW HANDLED BY GameEngine (Phase 1)
 
       // Advanced obstacle collision interactions
       game.planets.forEach((planet1, index1) => {
@@ -1207,332 +1317,19 @@ export const GameCanvas = () => {
           const minDist = planet1.radius + planet2.radius;
           
           if (dist < minDist && dist > 0) {
-            // Meteor-Blackhole interactions: meteors get absorbed, black hole grows
-            if ((planet1.type === "meteor" && planet2.type === "blackhole") || 
-                (planet1.type === "blackhole" && planet2.type === "meteor")) {
-              const meteor = planet1.type === "meteor" ? planet1 : planet2;
-              const blackhole = planet1.type === "blackhole" ? planet1 : planet2;
-              const meteorIndex = planet1.type === "meteor" ? index1 : index2;
-              
-              // Black hole absorbs meteor and grows slightly
-              blackhole.radius += meteor.radius * 0.15; // Small growth from meteor absorption
-              blackhole.mass += meteor.mass * 0.8; // Absorb most of the meteor's mass
-              blackhole.gravityMultiplier = (blackhole.gravityMultiplier || 1) * 1.02; // Slight gravity increase
-              
-              // Update color based on new size
-              if (blackhole.radius > 100) {
-                blackhole.color = "hsl(300, 100%, 15%)"; // Darker purple for large black holes
-              } else if (blackhole.radius > 80) {
-                blackhole.color = "hsl(290, 100%, 18%)"; // Medium purple
-              }
-              
-              // Create dramatic absorption effect
-              createParticles(meteor.x, meteor.y, "hsl(0, 100%, 70%)", 15);
-              createParticles(blackhole.x, blackhole.y, "hsl(270, 100%, 50%)", 10);
-              createParticles(blackhole.x, blackhole.y, "hsl(280, 100%, 60%)", 8); // Growth effect
-              
-              // Remove the meteor (it gets absorbed)
-              game.planets.splice(meteorIndex, 1);
-              return;
-            }
+            // Meteor-Blackhole absorption - NOW HANDLED BY GameEngine (Phase 4)
             
-            // Planet2-Debris interactions: debris bounces, planet2 continues
-            if ((planet1.type === "planet2" && planet2.type === "debris") || 
-                (planet1.type === "debris" && planet2.type === "planet2")) {
-              const debris = planet1.type === "debris" ? planet1 : planet2;
-              const planet2Obj = planet1.type === "planet2" ? planet1 : planet2;
-              
-              if (debris.canBounce && debris.bounceCount < 3) {
-                const normalX = dx / dist;
-                const normalY = dy / dist;
-                
-                // Only debris bounces, planet2 is too massive to be affected much
-                debris.vx = -debris.vx * 0.9 + normalX * 2;
-                debris.vy = -debris.vy * 0.9 + normalY * 2;
-                debris.bounceCount++;
-                
-                // Award points for debris bounce off planet
-                setScore(prev => {
-                  const newScore = prev + 15;
-                  const isNewHighScore = newScore > highScore;
-                  
-                  priorityToast("Debris bounce! +15 points", 15, { 
-                    duration: 1000,
-                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
-                  });
-                  
-                  return newScore;
-                });
-                
-                createParticles(debris.x, debris.y, "hsl(30, 70%, 60%)", 6);
-              }
-              return;
-            }
+            // Planet2-Debris interactions - NOW HANDLED BY GameEngine (Phase 2)
             
-            // Blackhole-Debris interactions: debris gets absorbed after bounces, black hole grows
-            if ((planet1.type === "blackhole" && planet2.type === "debris") || 
-                (planet1.type === "debris" && planet2.type === "blackhole")) {
-              const debris = planet1.type === "debris" ? planet1 : planet2;
-              const blackhole = planet1.type === "blackhole" ? planet1 : planet2;
-              const debrisIndex = planet1.type === "debris" ? index1 : index2;
-              
-              if (debris.bounceCount >= 2) {
-                // Debris gets absorbed after multiple bounces, black hole grows
-                blackhole.radius += debris.radius * 0.1; // Small growth from debris absorption
-                blackhole.mass += debris.mass * 0.6; // Absorb some of the debris mass
-                blackhole.gravityMultiplier = (blackhole.gravityMultiplier || 1) * 1.01; // Tiny gravity increase
-                
-                // Award points for debris destruction
-                setScore(prev => {
-                  const newScore = prev + 75;
-                  const isNewHighScore = newScore > highScore;
-                  
-                  priorityToast("Debris destroyed! +75 points", 75, { 
-                    duration: 1500,
-                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
-                  });
-                  
-                  return newScore;
-                });
-                
-                // Update color based on new size
-                if (blackhole.radius > 100) {
-                  blackhole.color = "hsl(300, 100%, 15%)"; // Darker purple for large black holes
-                } else if (blackhole.radius > 80) {
-                  blackhole.color = "hsl(290, 100%, 18%)"; // Medium purple
-                }
-                
-                createParticles(debris.x, debris.y, "hsl(30, 70%, 60%)", 12);
-                createParticles(blackhole.x, blackhole.y, "hsl(270, 100%, 50%)", 8);
-                createParticles(blackhole.x, blackhole.y, "hsl(280, 100%, 60%)", 5); // Growth effect
-                game.planets.splice(debrisIndex, 1);
-              } else if (debris.canBounce) {
-                // Debris bounces away from blackhole
-                const normalX = dx / dist;
-                const normalY = dy / dist;
-                debris.vx += normalX * 3;
-                debris.vy += normalY * 3;
-                debris.bounceCount++;
-                
-                // Award points for debris bounce
-                setScore(prev => {
-                  const newScore = prev + 15;
-                  const isNewHighScore = newScore > highScore;
-                  
-                  priorityToast("Debris bounce! +15 points", 15, { 
-                    duration: 1000,
-                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
-                  });
-                  
-                  return newScore;
-                });
-                
-                createParticles(debris.x, debris.y, "hsl(30, 70%, 60%)", 4);
-              }
-              return;
-            }
+            // Blackhole-Debris interactions - NOW HANDLED BY GameEngine (Phases 3-4)
             
-            // Meteor-Meteor collisions: both explode spectacularly with blast radius
-            if (planet1.type === "meteor" && planet2.type === "meteor") {
-              const explosionX = (planet1.x + planet2.x) / 2;
-              const explosionY = (planet1.y + planet2.y) / 2;
-              const blastRadius = 80 + Math.random() * 40; // Variable blast radius
-              const blastForce = 3 + Math.random() * 2;
-              
-              // Create massive explosion
-              createExplosion(explosionX, explosionY, blastRadius, blastForce, [index1, index2]);
-              
-              // Remove both meteors
-              const indicesToRemove = [index1, index2].sort((a, b) => b - a);
-              indicesToRemove.forEach(idx => game.planets.splice(idx, 1));
-              return;
-            }
+            // Explosion Mechanics - NOW HANDLED BY GameEngine (Phase 5)
+            // - Meteor-Meteor collisions
+            // - Planet2-Planet2 collisions
+            // - Debris-Debris collisions
+            // - Meteor-Planet2 collisions
             
-            // Planet2-Planet2 collisions: create a smaller but still significant explosion
-            if (planet1.type === "planet2" && planet2.type === "planet2") {
-              const explosionX = (planet1.x + planet2.x) / 2;
-              const explosionY = (planet1.y + planet2.y) / 2;
-              const blastRadius = 60 + Math.random() * 30;
-              const blastForce = 2 + Math.random() * 1.5;
-              
-              // Create explosion with blue-white colors for planet2
-              createParticles(explosionX, explosionY, "hsl(200, 100%, 80%)", 20);
-              createParticles(explosionX, explosionY, "hsl(220, 100%, 90%)", 15);
-              createExplosion(explosionX, explosionY, blastRadius, blastForce, [index1, index2]);
-              
-              // Remove both planets
-              const indicesToRemove = [index1, index2].sort((a, b) => b - a);
-              indicesToRemove.forEach(idx => game.planets.splice(idx, 1));
-              return;
-            }
-            
-            // Debris-Debris collisions: fragmentation with small explosions
-            if (planet1.type === "debris" && planet2.type === "debris") {
-              const explosionX = (planet1.x + planet2.x) / 2;
-              const explosionY = (planet1.y + planet2.y) / 2;
-              const blastRadius = 40 + Math.random() * 20;
-              const blastForce = 1.5 + Math.random() * 1;
-              
-              // Create fragmentation particles with metallic colors
-              createParticles(explosionX, explosionY, "hsl(30, 80%, 60%)", 15);
-              createParticles(explosionX, explosionY, "hsl(45, 70%, 70%)", 10);
-              createExplosion(explosionX, explosionY, blastRadius, blastForce, [index1, index2]);
-              
-              // Remove both debris
-              const indicesToRemove = [index1, index2].sort((a, b) => b - a);
-              indicesToRemove.forEach(idx => game.planets.splice(idx, 1));
-              return;
-            }
-            
-            // Meteor-Planet2 collisions: planet explodes, meteor gets deflected
-            if ((planet1.type === "meteor" && planet2.type === "planet2") || 
-                (planet1.type === "planet2" && planet2.type === "meteor")) {
-              const meteor = planet1.type === "meteor" ? planet1 : planet2;
-              const planet = planet1.type === "planet2" ? planet1 : planet2;
-              const meteorIndex = planet1.type === "meteor" ? index1 : index2;
-              const planetIndex = planet1.type === "planet2" ? index1 : index2;
-              
-              // Planet explodes at its location
-              const blastRadius = 80 + Math.random() * 40; // Moderate blast radius
-              const blastForce = 3 + Math.random() * 2; // Strong explosion
-              
-              // Create planet explosion with blue-white colors
-              createParticles(planet.x, planet.y, "hsl(200, 100%, 80%)", 20); // Blue planet fragments
-              createParticles(planet.x, planet.y, "hsl(220, 100%, 90%)", 15); // Light blue energy
-              createParticles(planet.x, planet.y, "hsl(240, 100%, 85%)", 12); // White-blue core
-              
-              // Create the explosion with blast radius damage (exclude meteor from blast)
-              createExplosion(planet.x, planet.y, blastRadius, blastForce, [meteorIndex]);
-              
-              // Deflect meteor in a new direction based on collision angle
-              const normalX = dx / dist;
-              const normalY = dy / dist;
-              const deflectionStrength = 4 + Math.random() * 3; // Strong deflection
-              
-              // Deflect meteor away from planet with some randomness
-              const randomAngle = (Math.random() - 0.5) * Math.PI * 0.5; // ±45 degrees variation
-              const deflectX = Math.cos(Math.atan2(normalY, normalX) + randomAngle);
-              const deflectY = Math.sin(Math.atan2(normalY, normalX) + randomAngle);
-              
-              meteor.vx = deflectX * deflectionStrength;
-              meteor.vy = deflectY * deflectionStrength;
-              
-              // Create meteor deflection particles
-              createParticles(meteor.x, meteor.y, "hsl(0, 100%, 70%)", 8); // Red-orange meteor trail
-              
-              // Award bonus points for the collision
-              setScore(prev => {
-                const newScore = prev + 100;
-                const isNewHighScore = newScore > highScore;
-                
-                // Show toast with dynamic color based on high score status
-                priorityToast("Meteor collision! +100 points", 100, { 
-                  duration: 2000,
-                  className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
-                });
-                
-                return newScore;
-              });
-              
-              // Remove only the planet
-              game.planets.splice(planetIndex, 1);
-              return;
-            }
-            
-            // Blackhole-Blackhole collisions: absorption and growth mechanics
-            if (planet1.type === "blackhole" && planet2.type === "blackhole") {
-              const explosionX = (planet1.x + planet2.x) / 2;
-              const explosionY = (planet1.y + planet2.y) / 2;
-              
-              // Calculate combined properties
-              const combinedRadius = Math.max(planet1.radius, planet2.radius) * 1.2 + Math.min(planet1.radius, planet2.radius) * 0.3;
-              const combinedMass = planet1.mass + planet2.mass;
-              const combinedGravity = Math.max(planet1.gravityMultiplier || 1, planet2.gravityMultiplier || 1) * 1.15;
-              
-              // Check if the resulting black hole would be too large (disappearance threshold)
-              const maxRadius = 150; // Maximum radius before disappearance
-              const maxMass = 15000; // Maximum mass before disappearance
-              
-              if (combinedRadius > maxRadius || combinedMass > maxMass) {
-                // Black hole becomes unstable and disappears in a spectacular explosion
-                const megaBlastRadius = 200 + Math.random() * 100;
-                const megaBlastForce = 8 + Math.random() * 4;
-                
-                // Create massive explosion effect
-                createParticles(explosionX, explosionY, "hsl(280, 100%, 90%)", 60);
-                createParticles(explosionX, explosionY, "hsl(300, 100%, 95%)", 50);
-                createParticles(explosionX, explosionY, "hsl(320, 100%, 80%)", 40);
-                createParticles(explosionX, explosionY, "hsl(60, 100%, 80%)", 30); // Golden energy
-                createExplosion(explosionX, explosionY, megaBlastRadius, megaBlastForce, [index1, index2]);
-                
-                // Add score bonus for witnessing black hole collapse
-                setScore(prev => {
-                  const newScore = prev + 500;
-                  const isNewHighScore = newScore > highScore;
-                  
-                  // Show toast with dynamic color based on high score status
-                  priorityToast("Black hole collapsed! +500 points", 500, { 
-                    duration: 3000,
-                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
-                  });
-                  
-                  return newScore;
-                });
-              } else {
-                // Create enhanced black hole with progressive growth
-                const blastRadius = 120 + Math.random() * 40;
-                const blastForce = 4 + Math.random() * 2;
-                
-                // Create gravitational wave effect
-                createParticles(explosionX, explosionY, "hsl(280, 100%, 80%)", 35);
-                createParticles(explosionX, explosionY, "hsl(300, 100%, 90%)", 25);
-                createParticles(explosionX, explosionY, "hsl(320, 100%, 70%)", 20);
-                createExplosion(explosionX, explosionY, blastRadius, blastForce, [index1, index2]);
-                
-                // Determine color based on size (larger = more dangerous looking)
-                let blackholeColor = "hsl(280, 100%, 20%)";
-                if (combinedRadius > 100) {
-                  blackholeColor = "hsl(300, 100%, 15%)"; // Darker purple for large black holes
-                } else if (combinedRadius > 80) {
-                  blackholeColor = "hsl(290, 100%, 18%)"; // Medium purple
-                }
-                
-                // Create the enhanced black hole
-                game.planets.push({
-                  id: `planet_${++game.planetIdCounter}`, // Assign unique ID
-                  x: explosionX,
-                  y: explosionY,
-                  vx: (planet1.vx + planet2.vx) / 2 * 0.9, // Slightly slower due to increased mass
-                  vy: (planet1.vy + planet2.vy) / 2 * 0.9,
-                  radius: combinedRadius,
-                  mass: combinedMass,
-                  type: "blackhole",
-                  color: blackholeColor,
-                  rotation: 0,
-                  rotationSpeed: Math.max(0.02, 0.08 - (combinedRadius / 1000)), // Slower rotation for larger black holes
-                  gravityMultiplier: combinedGravity
-                });
-                
-                // Add score for black hole merger
-                setScore(prev => {
-                  const newScore = prev + 100;
-                  const isNewHighScore = newScore > highScore;
-                  
-                  // Show toast with dynamic color based on high score status
-                  priorityToast("Black hole merger! +100 points", 100, { 
-                    duration: 2000,
-                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
-                  });
-                  
-                  return newScore;
-                });
-              }
-              
-              // Remove both original blackholes
-              const indicesToRemove = [index1, index2].sort((a, b) => b - a);
-              indicesToRemove.forEach(idx => game.planets.splice(idx, 1));
-              return;
-            }
+            // Blackhole-Blackhole collisions - NOW HANDLED BY GameEngine (Phase 6)
             
             // Planet2-Blackhole interactions: planet2 gets orbital effect
             if ((planet1.type === "planet2" && planet2.type === "blackhole") || 
@@ -1590,19 +1387,7 @@ export const GameCanvas = () => {
             if (planet.health <= 0) {
               const planetIndex = game.planets.indexOf(planet);
               if (planetIndex > -1) {
-                // Award points based on type
-                const points = planet.type === 'blackhole' ? 500 :
-                              planet.type === 'planet2' ? 200 :
-                              planet.type === 'meteor' ? 150 : 100;
-                setScore(prev => {
-                  const newScore = prev + points;
-                  priorityToast(`Destroyed ${planet.type}! +${points}`, points, {
-                    duration: 1500,
-                    className: newScore > highScore ? 'text-yellow-400 glow-blue font-bold' : 'text-blue-400 glow-blue font-bold'
-                  });
-                  return newScore;
-                });
-                
+                // Score handled by GameEngine
                 createParticles(planet.x, planet.y, planet.color, 30);
                 playSound('explosion').catch(() => {}); // Play explosion sound for obstacle destruction
                 game.planets.splice(planetIndex, 1);
@@ -1693,17 +1478,7 @@ export const GameCanvas = () => {
                   break;
               }
               
-              setScore(prev => {
-                const newScore = prev + nearMissPoints;
-                const isNewHighScore = newScore > highScore;
-                
-                priorityToast(`High-speed near miss! +${nearMissPoints} points`, nearMissPoints, { 
-                  duration: 2000,
-                  className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
-                });
-                
-                return newScore;
-              });
+              // Score handled by GameEngine near miss detection
               
               // Create dramatic particles for high-speed near-miss
               createParticles(game.ship.x, game.ship.y, "hsl(45, 100%, 60%)", 15); // Golden particles for high reward
@@ -1758,7 +1533,7 @@ export const GameCanvas = () => {
           const dx = star.x - game.ship.x;
           const dy = star.y - game.ship.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          const acquisitionRadius = 35 * mobileScaleFactor; // Much larger acquisition radius
+          const acquisitionRadius = 40 * scaleFactorRef.current; // Scaled to reference resolution
           if (dist < acquisitionRadius) {
             star.collected = true;
             createParticles(star.x, star.y, "hsl(60, 100%, 50%)", 15);
@@ -1790,16 +1565,15 @@ export const GameCanvas = () => {
           const dx = wrench.x - game.ship.x;
           const dy = wrench.y - game.ship.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          const acquisitionRadius = 40 * mobileScaleFactor; // Slightly larger than stars
+          const acquisitionRadius = 40 * scaleFactorRef.current; // Scaled to reference resolution
           if (dist < acquisitionRadius) {
             wrench.collected = true;
             playSound('healthWrench');
             
-            // Award points for repairs (+150)
-            const pointsAwarded = 150;
-            setScore(prev => prev + pointsAwarded);
+            // Award points for repairs using combo system
+            awardPoints("Repairs", 150, 1500);
             
-            // Show pickup notification (custom component below score toasts)
+            // Show pickup notification
             showPickupNotification(
               "🔧 Repairs +150 pts",
               'bg-gradient-to-r from-green-400 to-emerald-500 text-slate-900 font-bold shadow-lg'
@@ -1859,11 +1633,10 @@ export const GameCanvas = () => {
             playSound('unlimitedAmmo').catch(() => {}); // Play unlimited ammo pickup sound
             createParticles(powerUp.x, powerUp.y, "hsl(45, 100%, 50%)", 30);
             
-            // Award points for unlimited ammo (+500)
-            const pointsAwarded = 500;
-            setScore(prev => prev + pointsAwarded);
+            // Award points for unlimited ammo using combo system
+            awardPoints("Unlimited Ammo!", 500, 2000);
             
-            // Show pickup notification (custom component below score toasts)
+            // Show pickup notification
             showPickupNotification(
               "Unlimited Ammo! +500 pts",
               'bg-gradient-to-r from-gray-300 to-slate-400 text-slate-900 font-bold shadow-lg'
@@ -1873,6 +1646,50 @@ export const GameCanvas = () => {
       });
 
       game.ammoPowerUps = game.ammoPowerUps.filter(p => !p.collected);
+
+      // Void Wipe collection
+      game.voidWipes.forEach(voidWipe => {
+        if (!voidWipe.collected) {
+          const dx = voidWipe.x - game.ship.x;
+          const dy = voidWipe.y - game.ship.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < game.ship.radius + voidWipe.radius) {
+            voidWipe.collected = true;
+            playSound('voidWipe').catch(() => {}); // Play void wipe sound
+            
+            // Create massive purple particle explosion
+            createParticles(voidWipe.x, voidWipe.y, "hsl(270, 100%, 70%)", 100);
+            createParticles(game.ship.x, game.ship.y, "hsl(270, 100%, 50%)", 50);
+            
+            // Award points for void wipe using combo system
+            awardPoints("VOID WIPE!", 1000, 3000);
+            
+            // Show pickup notification
+            showPickupNotification(
+              "💜 VOID WIPE! +1000 pts",
+              'bg-gradient-to-r from-purple-500 to-violet-600 text-white font-bold shadow-2xl'
+            );
+            
+            // Destroy ALL obstacles with explosions
+            game.planets.forEach(planet => {
+              createParticles(planet.x, planet.y, planet.color, 30);
+              // Create explosion effect for each destroyed obstacle
+              createParticles(planet.x, planet.y, "hsl(270, 100%, 60%)", 20);
+            });
+            
+            // Clear all obstacles
+            game.planets = [];
+            
+            // Screen shake effect for dramatic impact
+            game.shake = 15;
+            
+            // Set respite period - prevent new obstacles from spawning for 3 seconds
+            game.lastVoidWipeCollected = now;
+          }
+        }
+      });
+
+      game.voidWipes = game.voidWipes.filter(v => !v.collected);
 
       // Star-Obstacle interactions
       game.stars.forEach((star, starIndex) => {
@@ -1893,18 +1710,7 @@ export const GameCanvas = () => {
                 createParticles(planet.x, planet.y, "hsl(0, 100%, 70%)", 5);
                 star.collected = true;
                 
-                // Award points for meteor destroying star
-                setScore(prev => {
-                  const newScore = prev + 40;
-                  const isNewHighScore = newScore > highScore;
-                  
-                  priorityToast("Star destroyed by meteor! +40 points", 40, { 
-                    duration: 1500,
-                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
-                  });
-                  
-                  return newScore;
-                });
+                // Score handled by GameEngine
                 playSound('starAcquire');
                 break;
                 
@@ -1915,18 +1721,7 @@ export const GameCanvas = () => {
                 planet.radius += 0.5; // Slight growth
                 star.collected = true;
                 
-                // Award points for planet absorbing star
-                setScore(prev => {
-                  const newScore = prev + 30;
-                  const isNewHighScore = newScore > highScore;
-                  
-                  priorityToast("Star absorbed by planet! +30 points", 30, { 
-                    duration: 1500,
-                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
-                  });
-                  
-                  return newScore;
-                });
+                // Score handled by GameEngine
                 playSound('starAcquire');
                 break;
                 
@@ -1936,18 +1731,7 @@ export const GameCanvas = () => {
                 createParticles(planet.x, planet.y, "hsl(270, 100%, 50%)", 8);
                 star.collected = true;
                 
-                // Award points for blackhole absorbing star
-                setScore(prev => {
-                  const newScore = prev + 60;
-                  const isNewHighScore = newScore > highScore;
-                  
-                  priorityToast("Star consumed by black hole! +60 points", 60, { 
-                    duration: 1500,
-                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
-                  });
-                  
-                  return newScore;
-                });
+                // Score handled by GameEngine
                 playSound('starAcquire');
                 break;
                 
@@ -1957,18 +1741,7 @@ export const GameCanvas = () => {
                 createParticles(planet.x, planet.y, "hsl(30, 100%, 60%)", 3);
                 star.collected = true;
                 
-                // Award points for debris interacting with star
-                setScore(prev => {
-                  const newScore = prev + 20;
-                  const isNewHighScore = newScore > highScore;
-                  
-                  priorityToast("Star sparkle with debris! +20 points", 20, { 
-                    duration: 1500,
-                    className: `${isNewHighScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'} font-bold font-sans transition-colors duration-300`
-                  });
-                  
-                  return newScore;
-                });
+                // Score handled by GameEngine
                 playSound('starAcquire');
                 break;
             }
@@ -1976,13 +1749,15 @@ export const GameCanvas = () => {
         });
       });
 
-      // Update particles
-      game.particles = game.particles.filter(p => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life -= 0.02;
-        return p.life > 0;
-      });
+      // === TESTING: Delegate particle updates to GameEngine ===
+      // Sync current particles TO engine (from createParticles calls in GameCanvas)
+      if (engineRef.current) {
+        engineRef.current.setParticles(game.particles);
+        // Update particles in engine
+        engineRef.current.updateParticlesOnly();
+        // Sync updated particles FROM engine back to game
+        game.particles = engineRef.current.getState().particles;
+      }
 
       // Spawning with difficulty-based rates
       game.difficulty = 1 + score * 0.001;
@@ -2006,10 +1781,19 @@ export const GameCanvas = () => {
       const baseStarInterval = 3000;
       const intervals = difficultyManager.getSpawnIntervals(basePlanetInterval, baseStarInterval);
       
-      if (now - game.lastPlanetSpawn > intervals.planetInterval) {
-        spawnPlanet();
-        game.lastPlanetSpawn = now;
+      // Check if we're in the respite period after void wipe collection
+      const RESPITE_DURATION = 3000; // 3 seconds of calm after void wipe
+      const inRespitePeriod = game.lastVoidWipeCollected > 0 && (now - game.lastVoidWipeCollected < RESPITE_DURATION);
+      
+      // Only spawn obstacles if not in respite period
+      if (!inRespitePeriod) {
+        if (now - game.lastPlanetSpawn > intervals.planetInterval) {
+          spawnPlanet();
+          game.lastPlanetSpawn = now;
+        }
       }
+      
+      // Stars continue to spawn even during respite (for player to collect)
       if (now - game.lastStarSpawn > intervals.starInterval) {
         spawnStar();
         game.lastStarSpawn = now;
@@ -2027,418 +1811,44 @@ export const GameCanvas = () => {
 
       // Spawn ammo power-ups (ship level 2+ only)
       if (shouldSpawnAmmoPowerUp(now, game.lastAmmoPowerUpSpawn, hasWeapon)) {
-        const ammoPowerUp = createAmmoPowerUp(canvas.width, canvas.height, mobileScaleFactor, game.ship.x, game.ship.y);
+        const ammoPowerUp = createAmmoPowerUp(canvas.width, canvas.height, scaleFactorRef.current, game.ship.x, game.ship.y);
         game.ammoPowerUps.push(ammoPowerUp);
         game.lastAmmoPowerUpSpawn = now;
       }
 
-      // Render
-      game.particles.forEach(p => {
-        ctx.globalAlpha = p.life;
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
-        ctx.fill();
-      });
-      ctx.globalAlpha = 1;
-
-      // Render bullets (silver when unlimited ammo is active)
-      renderBullets(ctx, game.bullets, isUnlimitedAmmo);
-
-      game.planets.forEach(planet => {
-        if (planet.type === "meteor" && meteorImg.current && meteorImg.current.complete) {
-          // Render meteor sprite with rotation
-          ctx.save();
-          ctx.translate(planet.x, planet.y);
-          if (planet.rotation !== undefined) {
-            ctx.rotate(planet.rotation);
-          }
-          
-          const spriteSize = planet.radius * 2;
-          ctx.drawImage(
-            meteorImg.current,
-            -spriteSize / 2,
-            -spriteSize / 2,
-            spriteSize,
-            spriteSize
-          );
-          ctx.restore();
-        } else if (planet.type === "planet2" && planet2Img.current && planet2Img.current.complete) {
-          // Render planet2 sprite with rotation
-          ctx.save();
-          ctx.translate(planet.x, planet.y);
-          if (planet.rotation !== undefined) {
-            ctx.rotate(planet.rotation);
-          }
-          
-          const spriteSize = planet.radius * 2;
-          ctx.drawImage(
-            planet2Img.current,
-            -spriteSize / 2,
-            -spriteSize / 2,
-            spriteSize,
-            spriteSize
-          );
-          ctx.restore();
-        } else if (planet.type === "debris" && debrisImg.current && debrisImg.current.complete) {
-          // Render debris sprite with slow rotation
-          ctx.save();
-          ctx.translate(planet.x, planet.y);
-          if (planet.rotation !== undefined) {
-            ctx.rotate(planet.rotation);
-          }
-          
-          const spriteSize = planet.radius * 2;
-          ctx.drawImage(
-            debrisImg.current,
-            -spriteSize / 2,
-            -spriteSize / 2,
-            spriteSize,
-            spriteSize
-          );
-          ctx.restore();
-        } else if (planet.type === "blackhole" && blackholeImg.current && blackholeImg.current.complete) {
-          // Render blackhole sprite with rotation and special effects
-          ctx.save();
-          
-          // Add a dark gravitational field effect around the blackhole
-          const gradient = ctx.createRadialGradient(planet.x, planet.y, 0, planet.x, planet.y, planet.radius * 2);
-          gradient.addColorStop(0, "rgba(75, 0, 130, 0.8)"); // Dark purple center
-          gradient.addColorStop(0.5, "rgba(75, 0, 130, 0.4)"); // Fading purple
-          gradient.addColorStop(1, "rgba(75, 0, 130, 0)"); // Transparent edge
-          
-          ctx.fillStyle = gradient;
-          ctx.beginPath();
-          ctx.arc(planet.x, planet.y, planet.radius * 2, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Render the blackhole sprite with rotation
-          ctx.translate(planet.x, planet.y);
-          if (planet.rotation !== undefined) {
-            ctx.rotate(planet.rotation);
-          }
-          
-          const spriteSize = planet.radius * 2;
-          ctx.drawImage(
-            blackholeImg.current,
-            -spriteSize / 2,
-            -spriteSize / 2,
-            spriteSize,
-            spriteSize
-          );
-          ctx.restore();
-        } else {
-          // Render regular planet
-          ctx.shadowBlur = 20;
-          ctx.shadowColor = planet.color;
-          ctx.fillStyle = planet.color;
-          ctx.beginPath();
-          ctx.arc(planet.x, planet.y, planet.radius, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.shadowBlur = 0;
+      // Void Wipe spawning (rare, starts shortly after reaching ship level 2)
+      const canSpawnVoidWipe = score >= 2000; // Requires some progress into ship level 2
+      if (canSpawnVoidWipe && gameRunTime > 30000 && now - game.lastVoidWipeSpawn > 60000) { // 60 second minimum interval
+        // Low spawn chance for rarity (same as health wrenches)
+        if (Math.random() < 0.04) { // 4% chance per check
+          spawnVoidWipe();
+          game.lastVoidWipeSpawn = now;
         }
-      });
-
-      // Apply white flash effect to damaged obstacles
-      game.planets.forEach(planet => {
-        if (planet.flashUntil && Date.now() < planet.flashUntil) {
-          ctx.save();
-          
-          // Draw a bright white radial flash at the center (doesn't affect transparent parts)
-          const flashRadius = planet.radius * 0.4; // 40% of obstacle size for central flash
-          const gradient = ctx.createRadialGradient(
-            planet.x, planet.y, 0,
-            planet.x, planet.y, flashRadius
-          );
-          gradient.addColorStop(0, "rgba(255, 255, 255, 0.95)"); // Very bright white center
-          gradient.addColorStop(0.5, "rgba(255, 255, 255, 0.6)"); // Fade mid-way
-          gradient.addColorStop(1, "rgba(255, 255, 255, 0)"); // Transparent edge
-          
-          ctx.fillStyle = gradient;
-          ctx.beginPath();
-          ctx.arc(planet.x, planet.y, flashRadius, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        }
-      });
-
-      // Render scrap objects
-      game.scraps.forEach(scrap => {
-        if (scrapImg.current && scrapImg.current.complete) {
-          ctx.save();
-          
-          // Add glow effect to indicate scraps are collectible (matching star levels)
-          ctx.shadowBlur = 15;
-          
-          // Neutral white glow for scraps to distinguish from stars
-           ctx.shadowColor = "hsl(0, 0%, 90%)";
-          
-          ctx.translate(scrap.x, scrap.y);
-          ctx.rotate(scrap.rotation);
-          
-          // Calculate fade effect based on remaining lifespan
-          const fadeAlpha = Math.min(1, scrap.lifespan / (scrap.maxLifespan * 0.3)); // Start fading at 30% lifespan
-          ctx.globalAlpha = fadeAlpha;
-          
-          const spriteSize = scrap.radius * 2;
-          ctx.drawImage(
-            scrapImg.current,
-            -spriteSize / 2,
-            -spriteSize / 2,
-            spriteSize,
-            spriteSize
-          );
-          
-          ctx.shadowBlur = 0; // Reset shadow
-          ctx.restore();
-        } else {
-          // Fallback rendering if image not loaded
-          ctx.save();
-          ctx.globalAlpha = Math.min(1, scrap.lifespan / (scrap.maxLifespan * 0.3));
-          ctx.fillStyle = "hsl(25, 60%, 45%)";
-          ctx.beginPath();
-          ctx.arc(scrap.x, scrap.y, scrap.radius, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        }
-      });
-
-      game.stars.forEach(star => {
-        ctx.save();
-        ctx.shadowBlur = 15;
-        
-        star.pulsePhase += 0.1; // Increment pulse phase
-        const pulseScale = 1 + Math.sin(star.pulsePhase) * 0.2; // Calculate scale
-        
-        // Determine glow color and star sprite based on current score (ship level)
-         let starImage: HTMLImageElement;
-         let glowColor: string;
-         if (score >= 12500) {
-           // Ship level 3 - stars worth 1000 points - Purple glow
-           starImage = starUpgrade2Img.current;
-           glowColor = "hsl(280, 100%, 50%)";
-         } else if (score >= 1500) {
-           // Ship level 2 - stars worth 100 points - Red glow
-           starImage = starUpgradeImg.current;
-           glowColor = "hsl(0, 100%, 50%)";
-         } else {
-           // Ship level 1 - stars worth 10 points - Yellow glow
-           starImage = starImg.current;
-           glowColor = "hsl(60, 100%, 50%)";
-         }
-        
-        ctx.shadowColor = glowColor;
-        
-        const spriteSize = star.radius * 4 * pulseScale; // Apply pulse scale
-        ctx.drawImage(
-          starImage,
-          star.x - spriteSize / 2,
-          star.y - spriteSize / 2,
-          spriteSize,
-          spriteSize
-        );
-        
-        ctx.shadowBlur = 0;
-        ctx.restore();
-      });
-
-      // Health wrenches
-      game.healthWrenches.forEach(wrench => {
-        ctx.save();
-        
-        // Update pulse phase for visual effect
-        wrench.pulsePhase += 0.1;
-        const pulseScale = 1 + Math.sin(wrench.pulsePhase) * 0.2;
-        
-        // Green glow effect
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = "hsl(120, 100%, 50%)";
-        
-        const spriteSize = wrench.radius * 2 * pulseScale;
-        ctx.drawImage(
-          healthWrenchImg.current,
-          wrench.x - spriteSize / 2,
-          wrench.y - spriteSize / 2,
-          spriteSize,
-          spriteSize
-        );
-        
-        ctx.shadowBlur = 0;
-        ctx.restore();
-      });
-
-      // Ammo power-ups
-      game.ammoPowerUps.forEach(powerUp => {
-        renderAmmoPowerUp(ctx, powerUp, unlimitedAmmoImg.current);
-      });
-
-      // Render ship trails
-      game.shipTrails.forEach((trail, index) => {
-        const alpha = trail.life * 0.5;
-        const size = trail.life * 3;
-        
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = '#4f46e5'; // Purple trail color
-        ctx.beginPath();
-        ctx.arc(trail.x, trail.y, size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      });
-
-      // Ship shield (matches health meter color, or blue if overshield is active)
-      if (game.invulnerable > 0 && game.invulnerable % 10 < 5) {
-        ctx.save();
-        
-        // Use blue color if overshield is active, otherwise match health meter colors
-        const shieldColor = shield > 0 ? '#3b82f6' :      // Blue for overshield
-                           health >= 2.5 ? '#22c55e' :    // Green (full health)
-                           health >= 1.5 ? '#eab308' :    // Yellow (medium health)
-                           health > 0 ? '#ef4444' :       // Red (low health)
-                           '#666666';                     // Gray for no health
-        
-        // Add extra glow for shield (blue)
-        if (shield > 0) {
-          ctx.shadowBlur = 15;
-          ctx.shadowColor = shieldColor;
-        }
-        
-        // Draw main shield circle
-        ctx.globalAlpha = 0.5;
-        ctx.strokeStyle = shieldColor;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(game.ship.x, game.ship.y, game.ship.radius + 5, 0, Math.PI * 2);
-        ctx.stroke();
-        
-        // Draw cracks based on health status
-        const shieldRadius = game.ship.radius + 5;
-        
-        // Yellow (medium health) - a few cracks
-        if (health >= 1.5 && health < 2.5 && shield === 0) {
-          ctx.globalAlpha = 0.7;
-          ctx.strokeStyle = shieldColor;
-          ctx.lineWidth = 2;
-          
-          // Draw 3-4 cracks
-          const crackAngles = [0.3, 1.8, 3.5, 5.0];
-          crackAngles.forEach(angle => {
-            const startAngle = angle;
-            const endAngle = angle + 0.4;
-            ctx.beginPath();
-            ctx.moveTo(
-              game.ship.x + Math.cos(startAngle) * (shieldRadius - 3),
-              game.ship.y + Math.sin(startAngle) * (shieldRadius - 3)
-            );
-            ctx.lineTo(
-              game.ship.x + Math.cos(endAngle) * (shieldRadius + 3),
-              game.ship.y + Math.sin(endAngle) * (shieldRadius + 3)
-            );
-            ctx.stroke();
-          });
-        }
-        
-        // Red (low health) - many cracks
-        if (health > 0 && health < 1.5 && shield === 0) {
-          ctx.globalAlpha = 0.8;
-          ctx.strokeStyle = shieldColor;
-          ctx.lineWidth = 2;
-          
-          // Draw 8-10 cracks (more damaged)
-          const crackAngles = [0.2, 0.9, 1.6, 2.3, 3.0, 3.7, 4.4, 5.1, 5.8];
-          crackAngles.forEach(angle => {
-            const startAngle = angle;
-            const endAngle = angle + 0.5;
-            ctx.beginPath();
-            ctx.moveTo(
-              game.ship.x + Math.cos(startAngle) * (shieldRadius - 4),
-              game.ship.y + Math.sin(startAngle) * (shieldRadius - 4)
-            );
-            ctx.lineTo(
-              game.ship.x + Math.cos(endAngle) * (shieldRadius + 4),
-              game.ship.y + Math.sin(endAngle) * (shieldRadius + 4)
-            );
-            ctx.stroke();
-            
-            // Add small perpendicular cracks for extra damage look
-            const midAngle = (startAngle + endAngle) / 2;
-            const midX = game.ship.x + Math.cos(midAngle) * shieldRadius;
-            const midY = game.ship.y + Math.sin(midAngle) * shieldRadius;
-            const perpAngle = midAngle + Math.PI / 2;
-            ctx.beginPath();
-            ctx.moveTo(midX - Math.cos(perpAngle) * 3, midY - Math.sin(perpAngle) * 3);
-            ctx.lineTo(midX + Math.cos(perpAngle) * 3, midY + Math.sin(perpAngle) * 3);
-            ctx.stroke();
-          });
-        }
-        
-        ctx.restore();
       }
 
-      // Ship sprite upgrades: ship1 (0-1499), ship2 (1500-12499), ship3 (12500+)
+      // === Phases 3-8: Particles, bullets, planets, stars, pickups, and ship now handled by Renderer ===
+      // (All rendering above this point is handled by renderer.render() call)
+
+      // Ship upgrade checks (must run every frame for hasWeapon to update correctly)
       const isUpgradedToShip2 = score >= 1500;
       const isUpgradedToShip3 = score >= 12500;
       
-      // Check if ship just upgraded to ship2 and restore health + ammo
       if (isUpgradedToShip2 && !hasUpgraded) {
         setHasUpgraded(true);
-        setHealth(3.0); // Restore to full health on upgrade
-        setAmmo(100); // Fill ammo to 100 for level 2
-        setIsRecharging(false); // Ensure weapon is ready
+        setHealth(3.0);
+        setAmmo(100);
+        setIsRecharging(false);
         playSound('shipUpgrades');
-        triggerCaptainLevelUpDialog('level2'); // Trigger captain dialog for level 2
+        triggerCaptainLevelUpDialog('level2');
       }
       
-      // Check if ship just upgraded to ship3 and restore health + ammo
       if (isUpgradedToShip3 && !hasUpgradedToShip3) {
         setHasUpgradedToShip3(true);
-        setHealth(3.0); // Restore to full health on upgrade
-        setAmmo(200); // Fill ammo to 200 for level 3 (double capacity)
-        setIsRecharging(false); // Ensure weapon is ready
+        setHealth(3.0);
+        setAmmo(200);
+        setIsRecharging(false);
         playSound('shipUpgrades');
-        triggerCaptainLevelUpDialog('level3'); // Trigger captain dialog for level 3
-      }
-      
-      // Select appropriate ship sprites based on score
-      let shipIdleSprite, shipThrustSprite;
-      if (isUpgradedToShip3) {
-        shipIdleSprite = ship3IdleImg.current;
-        shipThrustSprite = ship3ThrustImg.current;
-      } else if (isUpgradedToShip2) {
-        shipIdleSprite = ship2IdleImg.current;
-        shipThrustSprite = ship2ThrustImg.current;
-      } else {
-        shipIdleSprite = shipIdleImg.current;
-        shipThrustSprite = shipThrustImg.current;
-      }
-      const shipSprite = isAccelerating ? shipThrustSprite : shipIdleSprite;
-      if (shipSprite && shipSprite.complete) {
-        ctx.save();
-        ctx.translate(game.ship.x, game.ship.y);
-        ctx.rotate(game.ship.angle + Math.PI / 2);
-        
-        // Apply green health glow effect if active (check ref for immediate timing)
-        const now = Date.now();
-        if (now < healthGlowEndTimeRef.current) {
-          ctx.shadowBlur = 30;
-          ctx.shadowColor = "hsl(120, 100%, 50%)"; // Bright green glow
-        } else {
-          ctx.shadowBlur = 0;
-          ctx.shadowColor = "transparent";
-        }
-        
-        const spriteSize = game.ship.radius * 2;
-        ctx.drawImage(
-          shipSprite,
-          -spriteSize / 2,
-          -spriteSize / 2,
-          spriteSize,
-          spriteSize
-        );
-        
-        // Reset shadow
-        ctx.shadowBlur = 0;
-        ctx.restore();
+        triggerCaptainLevelUpDialog('level3');
       }
 
       if (game.shake > 0) {
@@ -2500,12 +1910,14 @@ export const GameCanvas = () => {
     game.scraps = [];
     game.healthWrenches = [];
     game.ammoPowerUps = [];
+    game.voidWipes = [];
     game.bullets = [];
     game.particles = [];
     game.difficulty = 1;
     game.invulnerable = 180;
     game.nearMissTracker.clear(); // Clear near-miss tracking for new game
     game.planetIdCounter = 0; // Reset planet ID counter
+    game.lastVoidWipeCollected = 0; // Reset respite period
     
     // Reset shooting state
     setAmmo(maxAmmo); // Start with full ammo (100 or 200 based on level)
@@ -2531,763 +1943,77 @@ export const GameCanvas = () => {
     >
       {/* Game Area Container */}
       <div className={`flex flex-col items-center w-full h-full p-1 sm:p-2 md:p-4 ${isMobile ? 'justify-start pb-[15vh]' : 'justify-center'}`}>
-        {/* UI Header - Responsive Layout */}
+        {/* Game HUD - Extracted Component */}
         {gameState === "playing" && (
-          <div className="w-full max-w-6xl mb-1 sm:mb-2 md:mb-4">
-            {isMobile ? (
-              /* Mobile Layout - Stacked */
-              <div className="space-y-2 sm:space-y-3">
-                {/* Top Row - Logo, Help, and Score */}
-                <div className="flex items-center justify-between px-1 sm:px-2">
-                  <img 
-                    src={logoImage} 
-                    alt="Game Logo" 
-                    className="h-6 sm:h-8 w-auto object-contain" 
-                  />
-                  
-                  {/* Center section with High Score and Current Score */}
-                  <div className="flex flex-col items-center gap-0.5 sm:gap-1">
-                    {highScore > 0 && (
-                      <div className="text-xs sm:text-sm text-accent glow-blue">
-                        High Score: {highScore}
-                      </div>
-                    )}
-                    {/* Score and Difficulty on same row */}
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <div className={`text-xl sm:text-2xl md:text-3xl font-bold transition-colors duration-300 ${
-                        score > highScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'
-                      }`}>
-                        {score}
-                      </div>
-                      
-                      {/* Difficulty Indicator */}
-                      <div className="text-xs sm:text-sm text-muted-foreground">
-                        (<span className={`font-semibold ${
-                          currentDifficulty === 'easy' ? 'text-green-400' :
-                          currentDifficulty === 'medium' ? 'text-blue-400' :
-                          'text-red-400'
-                        }`}>
-                          {currentDifficulty.charAt(0).toUpperCase() + currentDifficulty.slice(1)}
-                        </span>)
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Help Icon and Hamburger Menu */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setShowHelp(!showHelp)}
-                      className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 text-primary hover:bg-primary/30 transition-colors flex items-center justify-center text-lg font-bold z-[70]"
-                    >
-                      ?
-                    </button>
-                    <HamburgerMenu 
-                      showJoystick={showJoystick}
-                      onToggleJoystick={handleToggleJoystick}
-                      isMobile={isMobile}
-                      isMuted={isMuted}
-                      onToggleMute={toggleMute}
-                      currentDifficulty={currentDifficulty}
-                      onDifficultyChange={handleDifficultyChange}
-                      highScore={highScore}
-                    />
-                  </div>
-                </div>
-                
-                {/* Bottom Row - Health, Shield, and Pause */}
-                <div className="flex items-center justify-between px-1 sm:px-2">
-                  {/* Health and Shield */}
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    {/* Health Bar */}
-                    <div className="flex items-center gap-1 sm:gap-2">
-                      <img src={redCrossSprite} alt="Health" className="w-4 sm:w-5 h-4 sm:h-5 drop-shadow-lg" style={{filter: 'drop-shadow(0 0 4px #00ffff)'}} />
-                      <div className="relative w-16 sm:w-20 h-2 sm:h-2.5 bg-black/50 rounded-full border border-primary/30">
-                        <div 
-                          className={`absolute top-0 left-0 h-full rounded-full transition-all duration-300 ${
-                            health >= 2.5 ? 'bg-green-500' :
-                            health >= 1.5 ? 'bg-yellow-500' :
-                            health > 0 ? 'bg-red-500' :
-                            'bg-transparent'
-                          }`}
-                          style={{
-                            width: `${Math.max(0, (health / 3.0) * 100)}%`,
-                            boxShadow: health > 0 ? `0 0 8px ${
-                              health >= 2.5 ? '#22c55e' :
-                              health >= 1.5 ? '#eab308' :
-                              '#ef4444'
-                            }` : 'none'
-                          }}
-                        />
-                      </div>
-                    </div>
-                    
-                    {/* Shield Bar */}
-                    <div className="flex items-center gap-1 sm:gap-2">
-                      <img 
-                        src={shieldSprite} 
-                        alt="Shield" 
-                        className={`w-4 sm:w-5 h-4 sm:h-5 drop-shadow-lg transition-opacity duration-300 ${shield > 0 ? 'opacity-100' : 'opacity-30'}`}
-                        style={{filter: shield > 0 ? 'drop-shadow(0 0 4px #3b82f6)' : 'drop-shadow(0 0 2px #64748b)'}} 
-                      />
-                      <div className={`relative w-16 sm:w-20 h-2 sm:h-2.5 bg-black/50 rounded-full border transition-all duration-300 ${shield > 0 ? 'border-blue-500/50' : 'border-gray-500/30'}`}>
-                        <div 
-                          className="absolute top-0 left-0 h-full bg-blue-500 rounded-full transition-all duration-300"
-                          style={{
-                            width: `${Math.max(0, (shield / 3.0) * 100)}%`,
-                            boxShadow: shield > 0 ? '0 0 8px #3b82f6' : 'none'
-                          }}
-                        />
-                      </div>
-                    </div>
-                    
-                    {/* Ammo Bar */}
-                    <div className="flex items-center gap-1 sm:gap-2">
-                      <img 
-                        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" 
-                        alt="Weapon" 
-                        className={`w-4 sm:w-5 h-4 sm:h-5 drop-shadow-lg transition-opacity duration-300 ${(hasWeapon && (ammo > 0 || isUnlimitedAmmo)) ? 'opacity-100' : 'opacity-30'}`}
-                        style={{
-                          filter: (hasWeapon && (ammo > 0 || isUnlimitedAmmo))
-                            ? isUnlimitedAmmo
-                              ? 'drop-shadow(0 0 8px #c0c0c0) brightness(1.3)'
-                              : 'drop-shadow(0 0 4px #60a5fa)'
-                            : 'drop-shadow(0 0 2px #64748b)',
-                          content: `url(${unlimitedAmmoImage})`
-                        }}
-                      />
-                      <div className={`relative w-16 sm:w-20 h-2 sm:h-2.5 bg-black/50 rounded-full border transition-all duration-300 ${hasWeapon ? (isUnlimitedAmmo ? 'border-gray-400/50' : 'border-cyan-500/50') : 'border-gray-500/30'}`}>
-                        <div 
-                          className={`absolute top-0 left-0 h-full rounded-full transition-all duration-300 ${
-                            isUnlimitedAmmo ? 'bg-gradient-to-r from-gray-300 to-slate-400' : 
-                            isRecharging ? 'bg-cyan-400' : 
-                            'bg-cyan-500'
-                          }`}
-                          style={{
-                            width: !hasWeapon ? '0%' : (isUnlimitedAmmo ? '100%' : `${Math.max(0, (ammo / maxAmmo) * 100)}%`),
-                            boxShadow: hasWeapon
-                              ? isUnlimitedAmmo 
-                                ? '0 0 10px #c0c0c0'
-                                : '0 0 8px #60a5fa'
-                              : 'none',
-                            animation: isRecharging ? 'pulse 1s ease-in-out infinite' : 'none'
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Pause Button */}
-                  <Button
-                    onClick={() => {
-                      console.log("🎮 PAUSE BUTTON CLICKED - About to call playMenuOpen()");
-                      playMenuOpen().catch(console.error);
-                      AudioManager.getInstance().stopShipEngineLoops(); // Stop ship engine loops when paused
-                      setGameState("paused");
-                    }}
-                    variant="outline"
-                    size="sm"
-                    className="bg-black/50 border-primary/30 text-primary hover:bg-primary/20 touch-manipulation text-xs sm:text-sm"
-                    style={{ minHeight: '36px', minWidth: '36px' }}
-                  >
-                    ⏸️
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              /* Desktop Layout - Single Row */
-              <div className="flex items-center justify-between px-2">
-                {/* Left side - Logo and Score */}
-                <div className="flex items-center gap-6">
-                  <img 
-                    src={logoImage} 
-                    alt="Game Logo" 
-                    className="h-10 w-auto object-contain" 
-                  />
-                  <div className="flex items-center gap-4">
-                    {highScore > 0 && (
-                      <div className="flex flex-col items-center">
-                        <div className="text-xs text-accent glow-blue opacity-80">
-                          High Score
-                        </div>
-                        <div className="text-xl font-bold text-accent glow-blue">
-                          {highScore}
-                        </div>
-                      </div>
-                    )}
-                    <div className="flex flex-col items-center">
-                      <div className="text-xs text-blue-400 glow-blue opacity-80">
-                        Score
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className={`text-3xl font-bold transition-colors duration-300 ${
-                          score > highScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'
-                        } text-glow`}>
-                          {score}
-                        </div>
-                        
-                        {/* Difficulty Indicator */}
-                        <div className="text-sm text-muted-foreground">
-                          (<span className={`font-semibold ${
-                            currentDifficulty === 'easy' ? 'text-green-400' :
-                            currentDifficulty === 'medium' ? 'text-blue-400' :
-                            'text-red-400'
-                          }`}>
-                            {currentDifficulty.charAt(0).toUpperCase() + currentDifficulty.slice(1)}
-                          </span>)
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Right side - Health, Shield, Ammo, and Menu */}
-                <div className="flex items-center gap-4">
-                  <img src={redCrossSprite} alt="Health" className="w-6 h-6 drop-shadow-lg" style={{filter: 'drop-shadow(0 0 4px #00ffff)'}} />
-                  <div className="relative w-32 h-3 bg-black/50 rounded-full border border-primary/30">
-                    <div 
-                      className={`absolute top-0 left-0 h-full rounded-full transition-all duration-300 ${
-                        health >= 2.5 ? 'bg-green-500' :
-                        health >= 1.5 ? 'bg-yellow-500' :
-                        health > 0 ? 'bg-red-500' :
-                        'bg-transparent'
-                      }`}
-                      style={{
-                        width: `${Math.max(0, (health / 3.0) * 100)}%`,
-                        boxShadow: health > 0 ? `0 0 10px ${
-                          health >= 2.5 ? '#22c55e' :
-                          health >= 1.5 ? '#eab308' :
-                          '#ef4444'
-                        }` : 'none'
-                      }}
-                    />
-                  </div>
-                  
-                  {/* Shield Bar */}
-                  <img 
-                    src={shieldSprite} 
-                    alt="Shield" 
-                    className={`w-6 h-6 drop-shadow-lg transition-opacity duration-300 ${shield > 0 ? 'opacity-100' : 'opacity-30'}`}
-                    style={{filter: shield > 0 ? 'drop-shadow(0 0 4px #3b82f6)' : 'drop-shadow(0 0 2px #64748b)'}} 
-                  />
-                  <div className={`relative w-32 h-3 bg-black/50 rounded-full border transition-all duration-300 ${shield > 0 ? 'border-blue-500/50' : 'border-gray-500/30'}`}>
-                    <div 
-                      className="absolute top-0 left-0 h-full bg-blue-500 rounded-full transition-all duration-300"
-                      style={{
-                        width: `${Math.max(0, (shield / 3.0) * 100)}%`,
-                        boxShadow: shield > 0 ? '0 0 10px #3b82f6' : 'none'
-                      }}
-                    />
-                  </div>
-                  
-                  {/* Ammo Bar */}
-                  <img 
-                    src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" 
-                    alt="Weapon" 
-                    className={`w-6 h-6 drop-shadow-lg transition-opacity duration-300 ${(hasWeapon && (ammo > 0 || isUnlimitedAmmo)) ? 'opacity-100' : 'opacity-30'}`}
-                    style={{
-                      filter: (hasWeapon && (ammo > 0 || isUnlimitedAmmo))
-                        ? isUnlimitedAmmo
-                          ? 'drop-shadow(0 0 8px #c0c0c0) brightness(1.3)'
-                          : 'drop-shadow(0 0 4px #60a5fa)'
-                        : 'drop-shadow(0 0 2px #64748b)',
-                      content: `url(${unlimitedAmmoImage})`
-                    }}
-                  />
-                  <div className={`relative w-32 h-3 bg-black/50 rounded-full border transition-all duration-300 ${hasWeapon ? (isUnlimitedAmmo ? 'border-gray-400/50' : 'border-cyan-500/50') : 'border-gray-500/30'}`}>
-                    <div 
-                      className={`absolute top-0 left-0 h-full rounded-full transition-all duration-300 ${
-                        isUnlimitedAmmo ? 'bg-gradient-to-r from-gray-300 to-slate-400' : 
-                        isRecharging ? 'bg-cyan-400' : 
-                        'bg-cyan-500'
-                      }`}
-                      style={{
-                        width: !hasWeapon ? '0%' : (isUnlimitedAmmo ? '100%' : `${Math.max(0, (ammo / maxAmmo) * 100)}%`),
-                        boxShadow: hasWeapon
-                          ? isUnlimitedAmmo 
-                            ? '0 0 12px #c0c0c0'
-                            : '0 0 10px #60a5fa'
-                          : 'none',
-                        animation: isRecharging ? 'pulse 1s ease-in-out infinite' : 'none'
-                      }}
-                    />
-                  </div>
-                  
-                  {/* Hamburger Menu */}
-                  <HamburgerMenu 
-                    showJoystick={showJoystick}
-                    onToggleJoystick={handleToggleJoystick}
-                    isMobile={isMobile}
-                    isMuted={isMuted}
-                    onToggleMute={toggleMute}
-                    currentDifficulty={currentDifficulty}
-                    onDifficultyChange={handleDifficultyChange}
-                    highScore={highScore}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+          <GameHUD
+            score={score}
+            highScore={highScore}
+            health={health}
+            shield={shield}
+            ammo={ammo}
+            maxAmmo={maxAmmo}
+            hasWeapon={hasWeapon}
+            isUnlimitedAmmo={isUnlimitedAmmo}
+            isRecharging={isRecharging}
+            currentDifficulty={currentDifficulty}
+            showHelp={showHelp}
+            showJoystick={showJoystick}
+            isMobile={isMobile}
+            isMuted={isMuted}
+            onPause={() => setGameState("paused")}
+            onToggleHelp={() => setShowHelp(!showHelp)}
+            onToggleJoystick={handleToggleJoystick}
+            onToggleMute={toggleMute}
+            onDifficultyChange={handleDifficultyChange}
+            playMenuOpen={playMenuOpen}
+          />
         )}
         
         {/* Game Canvas */}
         <div className="relative border-2 border-primary/30 rounded-lg overflow-hidden shadow-2xl">
           <canvas ref={canvasRef} className="block" />
         </div>
-        
-        {/* Help Popup Bubble - positioned relative to help icon */}
-        {gameState === "playing" && showHelp && (
-          <div className="fixed top-16 left-1/2 transform -translate-x-1/2 bg-card/95 backdrop-blur-xl border border-primary/30 rounded-lg p-3 text-xs text-muted-foreground whitespace-nowrap shadow-lg z-[80]">
-            <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-card/95"></div>
-            {isMobile ? (
-              <p>Use joystick to move • Tap pause button to pause</p>
-            ) : (
-              <p>WASD/Arrow Keys: Move • Mouse: Aim • Escape: Pause</p>
-            )}
-          </div>
-        )}
       </div>
 
       {gameState === "menu" && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-card/80 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-6 sm:p-12 text-center max-w-md w-full space-y-4 sm:space-y-6">
-            <img src={logoImage} alt="Void Runner" className="w-64 sm:w-80 h-auto mx-auto glow-blue" />
-            <p className="text-muted-foreground text-base sm:text-lg">Survive gravitational chaos</p>
-            <div className="space-y-1 sm:space-y-2 text-xs sm:text-sm text-muted-foreground text-left bg-muted/30 p-3 sm:p-4 rounded-lg">
-              {isMobile ? (
-                <>
-                  <p>🕹️ <strong>Virtual joystick</strong> to move</p>
-                  <p>⭐ Collect stars & scrap for points</p>
-                  <p>💚 Collect wrenches for health</p>
-                  <p>🪐 Avoid obstacles</p>
-                </>
-              ) : (
-                <>
-                  <p>🚀 <strong>WASD</strong> or <strong>Arrow Keys</strong> to thrust</p>
-                  <p>⭐ Collect stars & scrap for points</p>
-                  <p>💚 Collect wrenches for health</p>
-                  <p>🪐 Avoid obstacles</p>
-                </>
-              )}
-            </div>
-            
-            {/* Difficulty Selector */}
-            <div className="space-y-2 pt-4">
-              <div className="text-sm text-muted-foreground">Difficulty</div>
-              <div className="flex gap-2 justify-center">
-                {(['easy', 'medium', 'hard'] as DifficultyLevel[]).map((difficulty) => {
-                  const isHardLocked = difficulty === 'hard' && highScore < 12500;
-                  return (
-                  <button
-                    key={difficulty}
-                    onClick={() => {
-                      if (isHardLocked) return; // Prevent click if locked
-                      const difficultyManager = difficultyManagerRef.current;
-                      difficultyManager.setDifficulty(difficulty, true);
-                      setCurrentDifficulty(difficulty);
-                    }}
-                    disabled={isHardLocked}
-                    className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                      isHardLocked 
-                        ? 'bg-muted/10 text-muted-foreground/30 border border-muted/20 cursor-not-allowed opacity-50'
-                        : currentDifficulty === difficulty
-                        ? difficulty === 'easy' ? 'bg-green-500/20 text-green-400 border border-green-500/50'
-                        : difficulty === 'medium' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
-                        : 'bg-red-500/20 text-red-400 border border-red-500/50'
-                        : 'bg-muted/30 text-muted-foreground border border-muted/50 hover:bg-blue-500/10 hover:text-blue-400'
-                    }`}
-                  >
-                    {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}{isHardLocked && ' 🔒'}
-                  </button>
-                  );
-                })}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {currentDifficulty === 'easy' && 'Fewer obstacles, more forgiving'}
-                {currentDifficulty === 'medium' && 'Balanced gameplay, can get crazy'}
-                {currentDifficulty === 'hard' && 'More obstacles and faster, RIP'}
-              </div>
-            </div>
-            
-            {/* Achievements - Show when any previous score exists */}
-            {highScore > 0 && (
-              <div className="space-y-2 pt-4 border-t border-blue-500/20">
-                <div className="text-sm text-muted-foreground">Achievements</div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 1500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                    <img 
-                      src={trophyImage} 
-                      alt="Trophy" 
-                      className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 1500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+        <MainMenu
+          onStartGame={startGame}
+          highScore={highScore}
+          currentDifficulty={currentDifficulty}
+          onDifficultyChange={handleDifficultyChange}
+          isMobile={isMobile}
                     />
-                    <div className="flex-1">
-                      <div className="font-semibold">Rookie</div>
-                      <div className="text-xs opacity-70">1,500+ pts</div>
-                    </div>
-                  </div>
-                  <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 12500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                    <img 
-                      src={trophyImage} 
-                      alt="Trophy" 
-                      className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 12500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                    />
-                    <div className="flex-1">
-                      <div className="font-semibold">Ace Pilot</div>
-                      <div className="text-xs opacity-70">12,500+ pts</div>
-                    </div>
-                  </div>
-                  <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                    <img 
-                      src={trophyImage} 
-                      alt="Trophy" 
-                      className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 25000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                    />
-                    <div className="flex-1">
-                      <div className="font-semibold">Legend</div>
-                      <div className="text-xs opacity-70">25,000+ pts</div>
-                    </div>
-                  </div>
-                  <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 75000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                    <img 
-                      src={trophyImage} 
-                      alt="Trophy" 
-                      className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 75000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                    />
-                    <div className="flex-1">
-                      <div className="font-semibold">Psychonaut</div>
-                      <div className="text-xs opacity-70">75,000+ pts</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            <Button onClick={startGame} size="lg" className="w-full bg-blue-500 text-white hover:bg-blue-600 glow-blue text-base sm:text-lg">
-              START GAME
-            </Button>
-            {highScore > 0 && (
-              <div className="text-accent glow-blue text-sm sm:text-base">High Score: {highScore}</div>
-            )}
-          </div>
-        </div>
       )}
 
       {gameState === "paused" && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-card/90 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-6 sm:p-8 text-center space-y-3 sm:space-y-4 w-full max-w-sm">
-            <h2 className="text-2xl sm:text-3xl font-bold text-blue-400 glow-blue">PAUSED</h2>
-            
-            <Button onClick={() => {
-              playMenuClose().catch(console.error);
-              AudioManager.getInstance().startShipEngineLoops(); // Restart ship engine loops when resuming
-              setGameState("playing");
-            }} className="bg-blue-500 text-white hover:bg-blue-600 w-full">
-              RESUME
-            </Button>
-            
-            {/* Hamburger Menu Options */}
-            <div className="space-y-2 pt-2 border-t border-blue-500/20">
-              {/* Joystick Toggle - Only show on desktop */}
-              {!isMobile && (
-                <Button
-                  onClick={() => {
-                    setShowJoystick(!showJoystick);
-                  }}
-                  variant="outline"
-                  className={`w-full ${
-                    showJoystick 
-                      ? 'bg-blue-500/20 border-blue-500 text-blue-400' 
-                      : 'bg-card/50 border-blue-500/30 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400'
-                  }`}
-                >
-                  Joystick (J) {showJoystick ? '✓' : ''}
-                </Button>
-              )}
-              
-              {/* Mute Toggle */}
-              <Button
-                onClick={() => {
-                  toggleMute();
-                }}
-                variant="outline"
-                className={`w-full ${
-                  isMuted 
-                    ? 'bg-blue-500/20 border-blue-500 text-blue-400' 
-                    : 'bg-card/50 border-blue-500/30 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400'
-                }`}
-              >
-                Mute (M) {isMuted ? '✓' : ''}
-              </Button>
-              
-              {/* Difficulty Selection */}
-              <div className="space-y-2 pt-4">
-                <div className="text-sm text-muted-foreground">Difficulty</div>
-                <div className="flex gap-1">
-                  {(['easy', 'medium', 'hard'] as const).map((difficulty) => {
-                    const isHardLocked = difficulty === 'hard' && highScore < 12500;
-                    return (
-                    <button
-                      key={difficulty}
-                      onClick={() => {
-                        if (isHardLocked) return;
-                        const difficultyManager = difficultyManagerRef.current;
-                        difficultyManager.setDifficulty(difficulty, true);
-                        setCurrentDifficulty(difficulty);
-                      }}
-                      disabled={isHardLocked}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors flex-1 ${
-                        isHardLocked 
-                          ? 'bg-muted/10 text-muted-foreground/30 border border-muted/20 cursor-not-allowed opacity-50'
-                          : currentDifficulty === difficulty
-                          ? difficulty === 'easy' ? 'bg-green-500/20 text-green-400 border border-green-500/50'
-                          : difficulty === 'medium' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
-                          : 'bg-red-500/20 text-red-400 border border-red-500/50'
-                          : 'bg-muted/30 text-muted-foreground border border-muted/50 hover:bg-blue-500/10 hover:text-blue-400'
-                      }`}
-                    >
-                      {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}{isHardLocked && ' 🔒'}
-                    </button>
-                    );
-                  })}
-                </div>
-                <div className="text-xs text-muted-foreground text-center">
-                  {currentDifficulty === 'easy' && 'Fewer obstacles, more forgiving'}
-                  {currentDifficulty === 'medium' && 'Balanced gameplay, can get crazy'}
-                  {currentDifficulty === 'hard' && 'More obstacles and faster, RIP'}
-                </div>
-              </div>
-              
-{/* Achievements - Show when any previous score exists */}
-                {highScore > 0 && (
-                  <div className="space-y-2 pt-4 border-t border-blue-500/20">
-                    <div className="text-sm text-muted-foreground">Achievements</div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      {/* Rookie */}
-                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 1500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                        <img 
-                          src={trophyImage} 
-                          alt="Trophy" 
-                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 1500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+        <PauseMenu
+          onResume={handleResume}
+          showJoystick={showJoystick}
+          onToggleJoystick={() => setShowJoystick(!showJoystick)}
+          isMuted={isMuted}
+          onToggleMute={toggleMute}
+          currentDifficulty={currentDifficulty}
+          onDifficultyChange={handleDifficultyChange}
+          highScore={highScore}
+          isMobile={isMobile}
                         />
-                        <div className="flex-1">
-                          <div className="font-semibold">Rookie</div>
-                          <div className="text-xs opacity-70">1,500+ pts</div>
-                        </div>
-                      </div>
-                      {/* Ace Pilot */}
-                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 12500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                        <img 
-                          src={trophyImage} 
-                          alt="Trophy" 
-                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 12500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                        />
-                        <div className="flex-1">
-                          <div className="font-semibold">Ace Pilot</div>
-                          <div className="text-xs opacity-70">12,500+ pts</div>
-                        </div>
-                      </div>
-                      {/* Legend */}
-                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                        <img 
-                          src={trophyImage} 
-                          alt="Trophy" 
-                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 25000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                        />
-                        <div className="flex-1">
-                          <div className="font-semibold">Legend</div>
-                          <div className="text-xs opacity-70">25,000+ pts</div>
-                        </div>
-                      </div>
-                      {/* Psychonaut */}
-                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 75000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                        <img 
-                          src={trophyImage} 
-                          alt="Trophy" 
-                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 75000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                        />
-                        <div className="flex-1">
-                          <div className="font-semibold">Psychonaut</div>
-                          <div className="text-xs opacity-70">75,000+ pts</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-            </div>
-          </div>
-        </div>
       )}
 
       {gameState === "gameover" && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-card/90 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-6 sm:p-12 text-center space-y-4 sm:space-y-6 w-full max-w-md">
-            <img src={gameOverImage} alt="Game Over" className="w-48 sm:w-64 h-auto mx-auto" />
-            <div className="space-y-1 sm:space-y-2">
-              <div className="text-xl sm:text-2xl">
-                Score: <span className={`font-bold transition-colors duration-300 ${
-                  score >= highScore ? 'text-yellow-400 glow-blue' : 'text-blue-400 glow-blue'
-                }`}>{score}</span>
-                {score >= highScore && score > 0 && (
-                  <div className="text-sm text-blue-400 glow-blue animate-pulse">NEW HIGH SCORE!</div>
-                )}
-              </div>
-              <div className="text-lg sm:text-xl text-muted-foreground">
-                Previous High Score: <span className={`font-bold ${
-                  previousHighScore >= highScore && previousHighScore > 0
-                    ? 'text-yellow-400 glow-yellow'
-                    : 'text-blue-400 glow-blue'
-                }`}>{previousHighScore > 0 ? previousHighScore : 'None'}</span>
-              </div>
-            </div>
-            
-            <div className="space-y-3">
-              <Button onClick={startGame} size="lg" className="w-full bg-blue-500 text-white hover:bg-blue-600 glow-blue">
-                PLAY AGAIN
-              </Button>
-              
-              <Button 
-                onClick={() => {
-                  playMenuClose().catch(console.error);
-                  setGameState("menu");
-                }} 
-                variant="outline" 
-                size="lg" 
-                className="w-full bg-card/50 border-blue-500/30 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400"
-              >
-                MAIN MENU
-              </Button>
-            </div>
-            
-            {/* Hamburger Menu Options */}
-            <div className="space-y-2 pt-4 border-t border-blue-500/20">
-              {/* Joystick Toggle - Only show on desktop */}
-              {!isMobile && (
-                <Button
-                  onClick={() => {
-                    setShowJoystick(!showJoystick);
-                  }}
-                  variant="outline"
-                  className={`w-full ${
-                    showJoystick 
-                      ? 'bg-blue-500/20 border-blue-500 text-blue-400' 
-                      : 'bg-card/50 border-blue-500/30 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400'
-                  }`}
-                >
-                  Joystick (J) {showJoystick ? '✓' : ''}
-                </Button>
-              )}
-              
-              {/* Mute Toggle */}
-              <Button
-                onClick={() => {
-                  toggleMute();
-                }}
-                variant="outline"
-                className={`w-full ${
-                  isMuted 
-                    ? 'bg-blue-500/20 border-blue-500 text-blue-400' 
-                    : 'bg-card/50 border-blue-500/30 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400'
-                }`}
-              >
-                Mute (M) {isMuted ? '✓' : ''}
-              </Button>
-              
-              {/* Difficulty Selection */}
-              <div className="space-y-2 pt-4">
-                <div className="text-sm text-muted-foreground">Difficulty</div>
-                <div className="flex gap-1">
-                  {(['easy', 'medium', 'hard'] as const).map((difficulty) => {
-                    const isHardLocked = difficulty === 'hard' && highScore < 12500;
-                    return (
-                    <button
-                      key={difficulty}
-                      onClick={() => {
-                        if (isHardLocked) return;
-                        const difficultyManager = difficultyManagerRef.current;
-                        difficultyManager.setDifficulty(difficulty, true);
-                        setCurrentDifficulty(difficulty);
-                      }}
-                      disabled={isHardLocked}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors flex-1 ${
-                        isHardLocked 
-                          ? 'bg-muted/10 text-muted-foreground/30 border border-muted/20 cursor-not-allowed opacity-50'
-                          : currentDifficulty === difficulty
-                          ? difficulty === 'easy' ? 'bg-green-500/20 text-green-400 border border-green-500/50'
-                          : difficulty === 'medium' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
-                          : 'bg-red-500/20 text-red-400 border border-red-500/50'
-                          : 'bg-muted/30 text-muted-foreground border border-muted/50 hover:bg-blue-500/10 hover:text-blue-400'
-                      }`}
-                    >
-                      {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}{isHardLocked && ' 🔒'}
-                    </button>
-                    );
-                  })}
-                </div>
-                <div className="text-xs text-muted-foreground text-center">
-                  {currentDifficulty === 'easy' && 'Fewer obstacles, more forgiving'}
-                  {currentDifficulty === 'medium' && 'Balanced gameplay, can get crazy'}
-                  {currentDifficulty === 'hard' && 'More obstacles and faster, RIP'}
-                </div>
-              </div>
-              
-{/* Achievements - Show when any previous score exists */}
-                {highScore > 0 && (
-                  <div className="space-y-2 pt-4 border-t border-blue-500/20">
-                    <div className="text-sm text-muted-foreground">Achievements</div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      {/* Rookie */}
-                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 1500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                        <img 
-                          src={trophyImage} 
-                          alt="Trophy" 
-                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 1500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
+        <GameOverMenu
+          score={score}
+          highScore={highScore}
+          previousHighScore={previousHighScore}
+          onPlayAgain={startGame}
+          onMainMenu={handleMainMenu}
+          showJoystick={showJoystick}
+          onToggleJoystick={() => setShowJoystick(!showJoystick)}
+          isMuted={isMuted}
+          onToggleMute={toggleMute}
+          currentDifficulty={currentDifficulty}
+          onDifficultyChange={handleDifficultyChange}
+          isMobile={isMobile}
                         />
-                        <div className="flex-1">
-                          <div className="font-semibold">Rookie</div>
-                          <div className="text-xs opacity-70">1,500+ pts</div>
-                        </div>
-                      </div>
-                      {/* Ace Pilot */}
-                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 12500 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                        <img 
-                          src={trophyImage} 
-                          alt="Trophy" 
-                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 12500 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                        />
-                        <div className="flex-1">
-                          <div className="font-semibold">Ace Pilot</div>
-                          <div className="text-xs opacity-70">12,500+ pts</div>
-                        </div>
-                      </div>
-                      {/* Legend */}
-                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 25000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                        <img 
-                          src={trophyImage} 
-                          alt="Trophy" 
-                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 25000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                        />
-                        <div className="flex-1">
-                          <div className="font-semibold">Legend</div>
-                          <div className="text-xs opacity-70">25,000+ pts</div>
-                        </div>
-                      </div>
-                      {/* Psychonaut */}
-                      <div className={`p-2 rounded border flex items-center gap-2 ${highScore >= 75000 ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300' : 'bg-slate-800/30 border-slate-700/50 text-slate-500'}`}>
-                        <img 
-                          src={trophyImage} 
-                          alt="Trophy" 
-                          className={`w-5 h-5 object-contain flex-shrink-0 ${highScore >= 75000 ? 'opacity-100' : 'opacity-20 grayscale'}`}
-                        />
-                        <div className="flex-1">
-                          <div className="font-semibold">Psychonaut</div>
-                          <div className="text-xs opacity-70">75,000+ pts</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-            </div>
-          </div>
-        </div>
       )}
       
       {/* Virtual Joystick - Visible on mobile or when toggled on desktop */}

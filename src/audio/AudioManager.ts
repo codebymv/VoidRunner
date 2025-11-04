@@ -17,6 +17,7 @@ import shoot2Sound from '../assets/shoot2.mp3';
 import chargeEmptySound from '../assets/charge_empty.mp3';
 import chargeReadySound from '../assets/charge_ready.mp3';
 import unlimitedAmmoSound from '../assets/unlimited_ammo.mp3';
+import voidWipeSound from '../assets/void_wipe.mp3';
 import explosionSound from '../assets/explosion.mp3';
 import shipIdleLoopSound from '../assets/ship_idle_loop.mp3';
 import shipThrustLoopSound from '../assets/ship_thrust_loop.mp3';
@@ -196,6 +197,7 @@ export class AudioManager {
         chargeEmpty: chargeEmptySound, // Ammo depleted
         chargeReady: chargeReadySound, // Ammo recharged
         unlimitedAmmo: unlimitedAmmoSound, // Unlimited ammo pickup
+        voidWipe: voidWipeSound, // Void wipe power-up (clears all obstacles)
         explosion: explosionSound // Obstacle destruction
       };
 
