@@ -141,6 +141,34 @@ export const GameCanvas = () => {
   const [totalNearMisses, setTotalNearMisses] = useState(() => parseInt(localStorage.getItem("totalNearMisses") || "0"));
   const [totalRepairs, setTotalRepairs] = useState(() => parseInt(localStorage.getItem("totalRepairs") || "0"));
   const [totalShotsFired, setTotalShotsFired] = useState(() => parseInt(localStorage.getItem("totalShotsFired") || "0"));
+  
+  // Function to send stats to parent window (FlashCore portal)
+  const sendStatsToParent = useCallback((score: number, nearMisses: number, repairs: number, shotsFired: number) => {
+    // Calculate achievements unlocked
+    const achievements = [
+      { id: 'rookie', threshold: 1500, check: () => score >= 1500 },
+      { id: 'ace', threshold: 12500, check: () => score >= 12500 },
+      { id: 'legend', threshold: 25000, check: () => score >= 25000 },
+      { id: 'psychonaut', threshold: 75000, check: () => score >= 75000 },
+      { id: 'voidwizard', threshold: 300000, check: () => score >= 300000 },
+      { id: 'untouchable', threshold: 100, check: () => nearMisses >= 100 },
+      { id: 'builtdifferent', threshold: 50, check: () => repairs >= 50 },
+      { id: 'lockedin', threshold: 1000, check: () => shotsFired >= 1000 },
+    ];
+    
+    const achievementsUnlocked = achievements.filter(a => a.check()).length;
+    const achievementsTotal = achievements.length;
+    
+    // Send to parent window if in iframe
+    if (window.parent !== window) {
+      window.parent.postMessage({
+        type: 'game:stats',
+        highScore: score,
+        achievementsUnlocked,
+        achievementsTotal
+      }, '*');
+    }
+  }, []);
   const [health, setHealth] = useState(3.0); // Changed from lives to health for fractional damage support
   const [shield, setShield] = useState(0.0); // Overshield that absorbs damage first (max 3.0)
   const healthGlowEndTimeRef = useRef(0); // Immediate ref for glow timing (no render delay)
@@ -176,6 +204,34 @@ export const GameCanvas = () => {
       setCurrentDifficulty('medium');
     }
   }, [currentDifficulty, highScore]);
+  
+  // Send stats to parent window (FlashCore portal) whenever they change
+  useEffect(() => {
+    sendStatsToParent(highScore, totalNearMisses, totalRepairs, totalShotsFired);
+  }, [highScore, totalNearMisses, totalRepairs, totalShotsFired, sendStatsToParent]);
+  
+  // Close help popup when clicking outside
+  useEffect(() => {
+    if (!showHelp) return;
+    
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Check if click is outside the help popup and help button
+      if (!target.closest('.help-popup') && !target.closest('.help-button')) {
+        setShowHelp(false);
+      }
+    };
+    
+    // Add small delay to prevent immediate closing when opening
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 100);
+    
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showHelp]);
   
   // Captain's commentary quotes for game over
   const captainGameOverQuotes = [
@@ -791,6 +847,13 @@ export const GameCanvas = () => {
       if (e.key === 'm' || e.key === 'M') {
         toggleMute();
         return; // Don't process this key further
+      }
+      
+      // Close help popup with Escape if it's showing
+      if (e.key === "Escape" && showHelp) {
+        e.preventDefault();
+        setShowHelp(false);
+        return;
       }
       
       game.keys[e.key.toLowerCase()] = true;
@@ -2085,7 +2148,7 @@ export const GameCanvas = () => {
       {gameState === "playing" && !isMobile && (
         <button
           onClick={() => setShowHelp(!showHelp)}
-          className="fixed bottom-1 right-1 w-12 h-12 rounded-full bg-primary/20 border-2 border-primary/30 text-primary hover:bg-primary/30 transition-colors flex items-center justify-center text-2xl font-bold z-[70] shadow-lg"
+          className="help-button fixed bottom-1 right-1 w-12 h-12 rounded-full bg-primary/20 border-2 border-primary/30 text-primary hover:bg-primary/30 transition-colors flex items-center justify-center text-2xl font-bold z-[70] shadow-lg"
           style={{ backdropFilter: 'blur(8px)' }}
         >
           ?

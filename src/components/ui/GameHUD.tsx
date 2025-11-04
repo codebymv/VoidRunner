@@ -100,14 +100,14 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 <div className="relative">
                   <button
                     onClick={onToggleHelp}
-                    className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 text-primary hover:bg-primary/30 transition-colors flex items-center justify-center text-lg font-bold z-[70]"
+                    className="help-button w-8 h-8 rounded-full bg-primary/20 border border-primary/30 text-primary hover:bg-primary/30 transition-colors flex items-center justify-center text-lg font-bold z-[70]"
                   >
                     ?
                   </button>
                   
                   {/* Help Popup - positioned below the help button (mobile) */}
                   {showHelp && isMobile && (
-                    <div className="absolute top-full right-0 mt-2 bg-card/95 backdrop-blur-xl border border-primary/30 rounded-lg shadow-2xl z-[80] max-w-[280px]">
+                    <div className="help-popup absolute top-full right-0 mt-2 bg-card/95 backdrop-blur-xl border border-primary/30 rounded-lg shadow-2xl z-[80] max-w-[280px]">
                       <div className="absolute -top-2 right-2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-card/95"></div>
                       <div className="p-3">
                         <ControlsCard isMobile={isMobile} />
@@ -369,7 +369,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
       {/* Desktop Help Popup - positioned from desktop floating button */}
       {showHelp && !isMobile && (
-        <div className="fixed bottom-14 right-1 bg-card/95 backdrop-blur-xl border border-primary/30 rounded-lg shadow-2xl z-[80] max-w-sm">
+        <div className="help-popup fixed bottom-14 right-1 bg-card/95 backdrop-blur-xl border border-primary/30 rounded-lg shadow-2xl z-[80] max-w-sm">
           <div className="absolute -bottom-2 right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-card/95"></div>
           <div className="p-3">
             <ControlsCard isMobile={isMobile} />
