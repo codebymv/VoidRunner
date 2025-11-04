@@ -198,7 +198,7 @@ class ToastPriorityManager {
       const toastOptions: any = {
         duration: nextToast.duration,
         className: nextToast.className,
-        position: nextToast.position || 'top-right' // Default to top-right for score toasts
+        position: nextToast.position || 'bottom-left' // Default to bottom-left for score toasts (right of joystick)
       };
       
       toast(nextToast.message, {

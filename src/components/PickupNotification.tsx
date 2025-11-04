@@ -43,8 +43,8 @@ export const PickupNotifications = () => {
   }, []);
 
   return (
-    <div className="fixed top-0 right-0 z-50 pointer-events-none">
-      <div className="flex flex-col items-end gap-2 p-4" style={{ marginTop: '140px' }}>
+    <div className="fixed bottom-0 right-0 z-50 pointer-events-none" style={{ right: '70px', bottom: '8px' }}>
+      <div className="flex flex-col-reverse items-end gap-2">
         {notifications.map((notification) => (
           <div
             key={notification.id}

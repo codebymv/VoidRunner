@@ -4,6 +4,7 @@ import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig(() => ({
+  base: './',  // Use relative paths for assets (needed for iframe/subdirectory deployment)
   server: {
     host: "::",
     port: 8080,

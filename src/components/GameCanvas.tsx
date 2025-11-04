@@ -4,9 +4,9 @@ import { MainMenu } from "./ui/MainMenu";
 import { PauseMenu } from "./ui/PauseMenu";
 import { GameOverMenu } from "./ui/GameOverMenu";
 import { GameHUD } from "./ui/GameHUD";
-import { priorityToast, toastManager, formatToastWithCombo } from "@/utils/toastPriority";
+import { priorityToast, toastManager, formatToastWithCombo } from "../utils/toastPriority";
 import { showPickupNotification } from "./PickupNotification";
-import { StarField } from "@/utils/StarField";
+import { StarField } from "../utils/StarField";
 import { useAudio } from "@/hooks/useAudio";
 import { useMobile } from "@/hooks/useMobile";
 import { VirtualJoystick } from "./VirtualJoystick";
@@ -136,6 +136,11 @@ export const GameCanvas = () => {
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(() => parseInt(localStorage.getItem("orbitalHighScore") || "0"));
   const [previousHighScore, setPreviousHighScore] = useState(() => parseInt(localStorage.getItem("orbitalHighScore") || "0")); // Track previous high score for display
+  
+  // Achievement stat tracking
+  const [totalNearMisses, setTotalNearMisses] = useState(() => parseInt(localStorage.getItem("totalNearMisses") || "0"));
+  const [totalRepairs, setTotalRepairs] = useState(() => parseInt(localStorage.getItem("totalRepairs") || "0"));
+  const [totalShotsFired, setTotalShotsFired] = useState(() => parseInt(localStorage.getItem("totalShotsFired") || "0"));
   const [health, setHealth] = useState(3.0); // Changed from lives to health for fractional damage support
   const [shield, setShield] = useState(0.0); // Overshield that absorbs damage first (max 3.0)
   const healthGlowEndTimeRef = useRef(0); // Immediate ref for glow timing (no render delay)
@@ -199,6 +204,10 @@ export const GameCanvas = () => {
   
   // Function to trigger captain level-up toast
   const triggerCaptainLevelUpDialog = useCallback((level: 'level2' | 'level3') => {
+    // Clear any existing dialogs first to prevent overlay
+    setShowCaptainDialog(false);
+    setShowGameOverDialog(false);
+    
     const message = captainLevelUpQuotes[level];
     setLevelUpMessage(message);
     setShowLevelUpDialog(true);
@@ -256,12 +265,14 @@ export const GameCanvas = () => {
     playMenuClose().catch(console.error);
     AudioManager.getInstance().startShipEngineLoops();
     setGameState("playing");
-  }, [playMenuClose]);
+    setAudioGameState(GameState.PLAYING); // Update audio volume for gameplay
+  }, [playMenuClose, setAudioGameState, GameState]);
 
   const handleMainMenu = useCallback(() => {
     playMenuClose().catch(console.error);
     setGameState("menu");
-  }, [playMenuClose]);
+    setAudioGameState(GameState.MENU); // Update audio volume for menu
+  }, [playMenuClose, setAudioGameState, GameState]);
 
    // Handle joystick input with useCallback for stable reference
    const handleJoystickInput = useCallback((input: { x: number; y: number }) => {
@@ -356,6 +367,10 @@ export const GameCanvas = () => {
             if (newHealth <= 0) {
               // Delay captain's commentary by 1700ms when player dies
               setTimeout(() => {
+                // Clear any existing dialogs first to prevent overlay
+                setShowCaptainDialog(false);
+                setShowLevelUpDialog(false);
+                
                 const randomQuote = captainGameOverQuotes[Math.floor(Math.random() * captainGameOverQuotes.length)];
                 setGameOverMessage(randomQuote);
                 setShowGameOverDialog(true);
@@ -363,6 +378,7 @@ export const GameCanvas = () => {
               }, 1700);
               
               setGameState("gameover");
+              setAudioGameState(GameState.GAME_OVER); // Update audio volume for game over
               toastManager.clearQueue(); // Clear all pending toasts when game over
               AudioManager.getInstance().stopShipEngineLoops(); // Stop ship engine loops on game over
               playMenuOpen().catch(console.error); // Play menu open sound when game over screen appears
@@ -398,6 +414,10 @@ export const GameCanvas = () => {
         if (newHealth <= 0) {
               // Delay captain's commentary by 1700ms when player dies
               setTimeout(() => {
+                // Clear any existing dialogs first to prevent overlay
+                setShowCaptainDialog(false);
+                setShowLevelUpDialog(false);
+                
                 const randomQuote = captainGameOverQuotes[Math.floor(Math.random() * captainGameOverQuotes.length)];
                 setGameOverMessage(randomQuote);
                 setShowGameOverDialog(true);
@@ -405,6 +425,7 @@ export const GameCanvas = () => {
               }, 1700);
               
               setGameState("gameover");
+              setAudioGameState(GameState.GAME_OVER); // Update audio volume for game over
               toastManager.clearQueue(); // Clear all pending toasts when game over
               AudioManager.getInstance().stopShipEngineLoops(); // Stop ship engine loops on game over
               playMenuOpen().catch(console.error); // Play menu open sound when game over screen appears
@@ -649,6 +670,7 @@ export const GameCanvas = () => {
           },
           onGameOver: () => {
             setGameState("gameover");
+            setAudioGameState(GameState.GAME_OVER); // Update audio volume for game over
           },
           onShipUpgrade: (level: 2 | 3) => {
             // Upgrades now handled in game loop to match original behavior
@@ -777,6 +799,7 @@ export const GameCanvas = () => {
         playMenuOpen().catch(console.error);
         AudioManager.getInstance().stopShipEngineLoops(); // Stop ship engine loops when paused
         setGameState("paused");
+        setAudioGameState(GameState.PAUSED); // Update audio volume for pause menu
       }
     };
 
@@ -1063,6 +1086,13 @@ export const GameCanvas = () => {
             const bullet = createBullet(game.ship, hasUpgradedToShip3);
             game.bullets.push(bullet);
             
+            // Track shots fired for achievement
+            setTotalShotsFired(prev => {
+              const newTotal = prev + 1;
+              localStorage.setItem("totalShotsFired", newTotal.toString());
+              return newTotal;
+            });
+            
             // Drain ammo (unless unlimited)
             if (!isUnlimitedAmmo) {
               setAmmo(prev => {
@@ -1099,6 +1129,13 @@ export const GameCanvas = () => {
               // Create auto-targeting bullet
               const bullet = createBullet(game.ship, true, targetAngle);
               game.bullets.push(bullet);
+              
+              // Track shots fired for achievement
+              setTotalShotsFired(prev => {
+                const newTotal = prev + 1;
+                localStorage.setItem("totalShotsFired", newTotal.toString());
+                return newTotal;
+              });
               
               // Drain ammo (unless unlimited)
               if (!isUnlimitedAmmo) {
@@ -1445,6 +1482,13 @@ export const GameCanvas = () => {
             if (!game.nearMissTracker.has(planet.id)) {
               game.nearMissTracker.set(planet.id, Date.now());
               
+              // Track near misses for achievement
+              setTotalNearMisses(prev => {
+                const newTotal = prev + 1;
+                localStorage.setItem("totalNearMisses", newTotal.toString());
+                return newTotal;
+              });
+              
               // Award large points based on planet type and speed
               let nearMissPoints = Math.round(100 + (planetSpeed * 10)); // Base 100 + speed bonus
               let planetTypeName = "high-speed obstacle";
@@ -1560,8 +1604,15 @@ export const GameCanvas = () => {
             wrench.collected = true;
             playSound('healthWrench');
             
-            // Award points for repairs using combo system
-            awardPoints("Repairs", 150, 1500);
+            // Track repairs collected for achievement
+            setTotalRepairs(prev => {
+              const newTotal = prev + 1;
+              localStorage.setItem("totalRepairs", newTotal.toString());
+              return newTotal;
+            });
+            
+            // Award points silently (notification shows via pickup system)
+            setScore(prev => prev + 150);
             
             // Show pickup notification
             showPickupNotification(
@@ -1623,8 +1674,8 @@ export const GameCanvas = () => {
             playSound('unlimitedAmmo').catch(() => {}); // Play unlimited ammo pickup sound
             createParticles(powerUp.x, powerUp.y, "hsl(45, 100%, 50%)", 30);
             
-            // Award points for unlimited ammo using combo system
-            awardPoints("Unlimited Ammo!", 500, 2000);
+            // Award points silently (notification shows via pickup system)
+            setScore(prev => prev + 500);
             
             // Show pickup notification
             showPickupNotification(
@@ -1651,8 +1702,8 @@ export const GameCanvas = () => {
             createParticles(voidWipe.x, voidWipe.y, "hsl(270, 100%, 70%)", 100);
             createParticles(game.ship.x, game.ship.y, "hsl(270, 100%, 50%)", 50);
             
-            // Award points for void wipe using combo system
-            awardPoints("VOID WIPE!", 1000, 3000);
+            // Award points silently (notification shows via pickup system)
+            setScore(prev => prev + 1000);
             
             // Show pickup notification
             showPickupNotification(
@@ -1855,6 +1906,7 @@ export const GameCanvas = () => {
   const startGame = async () => {
     playMenuClose().catch(console.error); // Play menu close sound when starting/resuming game
     setGameState("playing");
+    setAudioGameState(GameState.PLAYING); // Update audio volume for gameplay
     setScore(0);
     setHealth(3.0); // Reset to full health
     setShield(0.0); // Reset shield
@@ -1873,6 +1925,10 @@ export const GameCanvas = () => {
       // Keep the manually set difficulty
       setCurrentDifficulty(currentDiff);
     }
+    
+    // Clear any existing dialogs first to prevent overlay
+    setShowGameOverDialog(false);
+    setShowLevelUpDialog(false);
     
     // Show captain dialog at game start
     setShowCaptainDialog(true);
@@ -1950,7 +2006,10 @@ export const GameCanvas = () => {
             showJoystick={showJoystick}
             isMobile={isMobile}
             isMuted={isMuted}
-            onPause={() => setGameState("paused")}
+            onPause={() => {
+              setGameState("paused");
+              setAudioGameState(GameState.PAUSED); // Update audio volume for pause menu
+            }}
             onToggleHelp={() => setShowHelp(!showHelp)}
             onToggleJoystick={handleToggleJoystick}
             onToggleMute={toggleMute}
@@ -1972,12 +2031,16 @@ export const GameCanvas = () => {
           currentDifficulty={currentDifficulty}
           onDifficultyChange={handleDifficultyChange}
           isMobile={isMobile}
-                    />
+          nearMissCount={totalNearMisses}
+          repairsCollected={totalRepairs}
+          shotsFired={totalShotsFired}
+        />
       )}
 
       {gameState === "paused" && (
         <PauseMenu
           onResume={handleResume}
+          onMainMenu={handleMainMenu}
           showJoystick={showJoystick}
           onToggleJoystick={() => setShowJoystick(!showJoystick)}
           isMuted={isMuted}
@@ -1986,7 +2049,10 @@ export const GameCanvas = () => {
           onDifficultyChange={handleDifficultyChange}
           highScore={highScore}
           isMobile={isMobile}
-                        />
+          nearMissCount={totalNearMisses}
+          repairsCollected={totalRepairs}
+          shotsFired={totalShotsFired}
+        />
       )}
 
       {gameState === "gameover" && (
@@ -2003,7 +2069,10 @@ export const GameCanvas = () => {
           currentDifficulty={currentDifficulty}
           onDifficultyChange={handleDifficultyChange}
           isMobile={isMobile}
-                        />
+          nearMissCount={totalNearMisses}
+          repairsCollected={totalRepairs}
+          shotsFired={totalShotsFired}
+        />
       )}
       
       {/* Virtual Joystick - Visible on mobile or when toggled on desktop */}

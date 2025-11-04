@@ -106,14 +106,14 @@ export const CaptainDialog: React.FC<CaptainDialogProps> = ({ isVisible, onCompl
       {/* Dialog Card */}
       <div 
         className={`
-          absolute top-1/2 -translate-y-1/2 
+          absolute bottom-4 left-1/2 -translate-x-1/2
           bg-gradient-to-br from-slate-900/90 to-black/90 
           backdrop-blur-sm border border-slate-700/40 
           rounded-xl shadow-2xl p-4 flex items-center gap-4
           transition-all duration-500 ease-out
-          ${isAnimatingIn && !isAnimatingOut ? 'right-8 opacity-100' : ''}
-          ${isAnimatingOut ? '-right-96 opacity-0' : ''}
-          ${!isAnimatingIn && !isAnimatingOut ? '-right-96 opacity-0' : ''}
+          ${isAnimatingIn && !isAnimatingOut ? 'translate-y-0 opacity-100' : ''}
+          ${isAnimatingOut ? 'translate-y-32 opacity-0' : ''}
+          ${!isAnimatingIn && !isAnimatingOut ? 'translate-y-32 opacity-0' : ''}
         `}
         style={{
           minWidth: '400px',

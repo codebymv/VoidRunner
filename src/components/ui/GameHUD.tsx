@@ -1,10 +1,11 @@
 import { Button } from "./button";
 import { HamburgerMenu } from "../HamburgerMenu";
-import logoImage from "@/assets/logo.png";
-import redCrossSprite from "@/assets/red_cross.png";
-import shieldSprite from "@/assets/shield.svg";
-import unlimitedAmmoImage from '@/assets/unlimited_ammo.png';
-import { AudioManager } from "@/audio/AudioManager";
+import { ControlsCard } from "./ControlsCard";
+import logoImage from "../../assets/logo.png";
+import redCrossSprite from "../../assets/red_cross.png";
+import shieldSprite from "../../assets/shield.svg";
+import unlimitedAmmoImage from '../../assets/unlimited_ammo.png';
+import { AudioManager } from "../../audio/AudioManager";
 
 interface GameHUDProps {
   score: number;
@@ -96,12 +97,24 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               
               {/* Help Icon and Hamburger Menu */}
               <div className="flex items-center gap-1">
-                <button
-                  onClick={onToggleHelp}
-                  className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 text-primary hover:bg-primary/30 transition-colors flex items-center justify-center text-lg font-bold z-[70]"
-                >
-                  ?
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={onToggleHelp}
+                    className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 text-primary hover:bg-primary/30 transition-colors flex items-center justify-center text-lg font-bold z-[70]"
+                  >
+                    ?
+                  </button>
+                  
+                  {/* Help Popup - positioned below the help button (mobile) */}
+                  {showHelp && isMobile && (
+                    <div className="absolute top-full right-0 mt-2 bg-card/95 backdrop-blur-xl border border-primary/30 rounded-lg shadow-2xl z-[80] max-w-[280px]">
+                      <div className="absolute -top-2 right-2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-card/95"></div>
+                      <div className="p-3">
+                        <ControlsCard isMobile={isMobile} />
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <HamburgerMenu 
                   showJoystick={showJoystick}
                   onToggleJoystick={onToggleJoystick}
@@ -218,19 +231,24 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           /* Desktop Layout - Single Row */
           <div className="flex items-center justify-between px-2">
             {/* Left side - Logo and Score */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-6">
               <img 
                 src={logoImage} 
                 alt="Game Logo" 
-                className="h-6 w-auto object-contain" 
+                className="h-9 w-auto object-contain drop-shadow-lg" 
+                style={{filter: 'drop-shadow(0 0 6px rgba(59, 130, 246, 0.5))'}}
               />
-              <div className="flex items-center gap-2">
+              
+              {/* Vertical divider */}
+              <div className="h-10 w-px bg-primary/30"></div>
+              
+              <div className="flex items-center gap-6">
                 {highScore > 0 && (
                   <div className="flex flex-col items-center">
                     <div className="text-xs text-accent glow-blue opacity-80">
                       High Score
                     </div>
-                    <div className="text-lg font-bold text-accent glow-blue">
+                    <div className="text-xl font-bold text-accent glow-blue">
                       {highScore}
                     </div>
                   </div>
@@ -349,15 +367,13 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         )}
       </div>
 
-      {/* Help Popup Bubble - positioned relative to help icon */}
-      {showHelp && (
-        <div className="fixed top-16 left-1/2 transform -translate-x-1/2 bg-card/95 backdrop-blur-xl border border-primary/30 rounded-lg p-3 text-xs text-muted-foreground whitespace-nowrap shadow-lg z-[80]">
-          <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-card/95"></div>
-          {isMobile ? (
-            <p>Use joystick to move • Tap pause button to pause</p>
-          ) : (
-            <p>WASD/Arrow Keys: Move • Space: Shoot • Escape: Pause</p>
-          )}
+      {/* Desktop Help Popup - positioned from desktop floating button */}
+      {showHelp && !isMobile && (
+        <div className="fixed bottom-14 right-1 bg-card/95 backdrop-blur-xl border border-primary/30 rounded-lg shadow-2xl z-[80] max-w-sm">
+          <div className="absolute -bottom-2 right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-card/95"></div>
+          <div className="p-3">
+            <ControlsCard isMobile={isMobile} />
+          </div>
         </div>
       )}
     </>

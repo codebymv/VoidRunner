@@ -1,5 +1,6 @@
 import themeMusic from '../assets/theme.mp3';
 import theme2Music from '../assets/theme2.mp3';
+import theme3Music from '../assets/theme3.mp3';
 import gameOverSound from '../assets/game_over.mp3';
 import healthWrenchSound from '../assets/health_wrench.mp3';
 import shieldActivateSound from '../assets/shield_activate.mp3';
@@ -22,31 +23,44 @@ import explosionSound from '../assets/explosion.mp3';
 import shipIdleLoopSound from '../assets/ship_idle_loop.mp3';
 import shipThrustLoopSound from '../assets/ship_thrust_loop.mp3';
 
-export enum GameState {
-  MENU = 'menu',
-  PLAYING = 'playing',
-  PAUSED = 'paused',
-  GAME_OVER = 'game_over'
-}
+// Import audio configuration modules
+import { 
+  GameState,
+  MUSIC_LEVELS, 
+  SOUND_EFFECT_LEVELS,
+  VOICE_LEVELS,
+  AMBIENT_LEVELS,
+  getSoundEffectVolume,
+  getMusicVolumeForState
+} from './audioLevels';
+import { 
+  createAudioEffectsChain, 
+  connectEffectsChain,
+  type AudioEffectsChain 
+} from './audioEffects';
+
+// Re-export GameState for backward compatibility
+export { GameState };
 
 export class AudioManager {
   private static instance: AudioManager;
   private audioContext: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private masterLowpassFilter: BiquadFilterNode | null = null; // Low-pass filter for master output
-  private masterCompressor: DynamicsCompressorNode | null = null; // Master bus compressor
-  private masterLimiter: DynamicsCompressorNode | null = null; // Brick-wall limiter for peak control
-  private makeupGain: GainNode | null = null; // Makeup gain after compression
+  private audioEffects: AudioEffectsChain | null = null; // Master effects chain (compressor, limiter, makeup gain)
   private musicGain: GainNode | null = null;
   private soundEffectsGain: GainNode | null = null; // New sound effects bus
   private speechGain: GainNode | null = null; // Dedicated speech channel for maximum volume
   private isAudioInitialized: boolean = false; // Track if audio has been initialized
   
-  // Theme music
-  private themeAudio: HTMLAudioElement | null = null;
-  private theme2Audio: HTMLAudioElement | null = null;
-  private currentTheme: 1 | 2 = 1; // Track which theme is currently playing
+  // Theme music playlist system
+  private musicPlaylist: HTMLAudioElement[] = [];
+  private playlistSources: MediaElementAudioSourceNode[] = [];
+  private playlistGainNodes: GainNode[] = [];
+  private currentTrackIndex: number = 0;
+  private nextTrackIndex: number = 1;
   private isThemePlaying: boolean = false;
+  private isCrossfading: boolean = false;
   private currentGameState: GameState = GameState.MENU;
   
   // Sound effects
@@ -67,13 +81,6 @@ export class AudioManager {
   private readonly IDLE_FADEOUT_DELAY = 2.5; // Idle hum fades out after 2.5 seconds
   private idleStartTime: number = 0; // Track when ship became idle
   private idleFadeoutScheduled: boolean = false; // Track if fadeout is scheduled
-  
-  // Volume levels
-  private readonly MENU_VOLUME = 0.39; // 39% - Very subtle background music
-  private readonly GAMEPLAY_VOLUME = 0.41; // 41% - Lowered further for better gameplay audio balance
-  private readonly SOUND_EFFECT_VOLUME = 1.0; // 100% - Maximum volume for shooting sounds
-  private readonly SPEECH_VOLUME = 0.20; // 20% - Reduced to fit better in the audio mix
-  private readonly SHIP_ENGINE_VOLUME = 0.15; // 15% - Background engine ambience
   
   // Mute state
   private isMuted: boolean = false;
@@ -103,7 +110,6 @@ export class AudioManager {
       this.speechGain = this.audioContext.createGain(); // Create dedicated speech channel
       this.shipIdleGain = this.audioContext.createGain(); // Ship idle engine loop
       this.shipThrustGain = this.audioContext.createGain(); // Ship thrust engine loop
-      this.makeupGain = this.audioContext.createGain(); // Makeup gain after compression
       
       // Create low-pass filter for master output (cuts high frequencies above 12kHz)
       this.masterLowpassFilter = this.audioContext.createBiquadFilter();
@@ -111,25 +117,8 @@ export class AudioManager {
       this.masterLowpassFilter.frequency.value = 12000; // 12kHz cutoff
       this.masterLowpassFilter.Q.value = 0.7071; // Butterworth response (flat passband)
       
-      // Create master bus compressor for glue and punch
-      this.masterCompressor = this.audioContext.createDynamicsCompressor();
-      this.masterCompressor.threshold.setValueAtTime(-24, this.audioContext.currentTime); // Start compressing at -24dB
-      this.masterCompressor.knee.setValueAtTime(6, this.audioContext.currentTime); // Soft knee for smooth compression
-      this.masterCompressor.ratio.setValueAtTime(4, this.audioContext.currentTime); // 4:1 ratio for noticeable but musical compression
-      this.masterCompressor.attack.setValueAtTime(0.003, this.audioContext.currentTime); // 3ms attack (fast enough for transients)
-      this.masterCompressor.release.setValueAtTime(0.25, this.audioContext.currentTime); // 250ms release (musical timing)
-      
-      // Create brick-wall limiter for safety and loudness
-      this.masterLimiter = this.audioContext.createDynamicsCompressor();
-      this.masterLimiter.threshold.setValueAtTime(-3, this.audioContext.currentTime); // Limit at -3dB (safety headroom)
-      this.masterLimiter.knee.setValueAtTime(0, this.audioContext.currentTime); // Hard knee for true limiting
-      this.masterLimiter.ratio.setValueAtTime(20, this.audioContext.currentTime); // 20:1 ratio (essentially brick-wall)
-      this.masterLimiter.attack.setValueAtTime(0.001, this.audioContext.currentTime); // 1ms attack (instant limiting)
-      this.masterLimiter.release.setValueAtTime(0.1, this.audioContext.currentTime); // 100ms release (fast recovery)
-      
-      // Set makeup gain to compensate for compression (bring up to modern standards)
-      // This adds ~9dB to bring the -20dB output up to around -11dB to -12dB (streaming standard)
-      this.makeupGain.gain.setValueAtTime(2.8, this.audioContext.currentTime); // ~9dB boost (linear gain)
+      // Create audio effects chain (compressor, limiter, makeup gain)
+      this.audioEffects = createAudioEffectsChain(this.audioContext);
       
       // Master signal chain:
       // Buses → Master Gain → Low-pass Filter → Compressor → Makeup Gain → Limiter → Output
@@ -140,32 +129,48 @@ export class AudioManager {
       this.shipIdleGain.connect(this.masterGain);
       this.shipThrustGain.connect(this.masterGain);
       this.masterGain.connect(this.masterLowpassFilter);
-      this.masterLowpassFilter.connect(this.masterCompressor);
-      this.masterCompressor.connect(this.makeupGain);
-      this.makeupGain.connect(this.masterLimiter);
-      this.masterLimiter.connect(this.audioContext.destination);
+      this.masterLowpassFilter.connect(this.audioEffects.compressor);
+      connectEffectsChain(this.audioEffects, this.audioContext.destination);
       
-      // Initialize theme music
-      this.themeAudio = new Audio(themeMusic);
-      this.themeAudio.preload = 'auto';
+      // Initialize music playlist system with crossfading
+      // To add more songs, import them at the top and add to this array:
+      const playlist = [themeMusic, theme2Music, theme3Music];
       
-      this.theme2Audio = new Audio(theme2Music);
-      this.theme2Audio.preload = 'auto';
+      for (let i = 0; i < playlist.length; i++) {
+        const audio = new Audio(playlist[i]);
+        audio.preload = 'auto';
+        audio.volume = 1.0; // Set to full, control via gain node
+        
+        // Create gain node for this track
+        const gainNode = this.audioContext.createGain();
+        gainNode.gain.value = 0; // Start silent
+        
+        // Create source and connect to gain
+        const source = this.audioContext.createMediaElementSource(audio);
+        source.connect(gainNode);
+        gainNode.connect(this.musicGain);
+        
+        // Store references
+        this.musicPlaylist.push(audio);
+        this.playlistGainNodes.push(gainNode);
+        this.playlistSources.push(source);
+        
+        // Set up track end handler for crossfading
+        audio.addEventListener('ended', () => this.handleTrackEnd(i));
+      }
       
-      // Set up alternating theme system - when one ends, play the other
-      this.themeAudio.addEventListener('ended', () => {
-        this.switchToTheme(2);
-      });
+      // Pick a random starting track
+      this.currentTrackIndex = Math.floor(Math.random() * playlist.length);
       
-      this.theme2Audio.addEventListener('ended', () => {
-        this.switchToTheme(1);
-      });
+      // Set initial track gain for the randomly selected starting track
+      if (this.playlistGainNodes[this.currentTrackIndex]) {
+        this.playlistGainNodes[this.currentTrackIndex].gain.value = MUSIC_LEVELS.MENU;
+      }
+      
+      console.log(`🎲 Random starting track: ${this.currentTrackIndex}`);
       
       // Initialize sound effects
       this.initializeSoundEffects();
-      
-      // Set initial volume for menu state
-      this.setThemeVolume(this.MENU_VOLUME);
       
       this.isAudioInitialized = true;
       console.log('AudioManager initialized successfully');
@@ -266,11 +271,11 @@ export class AudioManager {
     thrustSource.connect(this.shipThrustGain!);
     
     // Start with idle state (idle at full volume, thrust at zero)
-    this.shipIdleGain!.gain.value = this.SHIP_ENGINE_VOLUME;
+    this.shipIdleGain!.gain.value = AMBIENT_LEVELS.SHIP_ENGINE;
     this.shipThrustGain!.gain.value = 0;
     
     // Set initial sound effects volume to match music level
-    this.setSoundEffectsVolume(this.MENU_VOLUME);
+    this.setSoundEffectsVolume(MUSIC_LEVELS.MENU);
     
     console.log('Sound effects initialized and routed through audio bus');
     console.log('Ship engine loops initialized (idle/thrust crossfading system ready)');
@@ -325,7 +330,7 @@ export class AudioManager {
       }
       
       try {
-        audio.volume = 0.68;
+        audio.volume = getSoundEffectVolume('starAcquire');
         audio.currentTime = 0;
         console.log(`🎵 Playing alternating star acquire sound: ${actualSoundName}`);
         audio.play().catch(error => {
@@ -348,20 +353,8 @@ export class AudioManager {
     console.log(`✅ Found sound '${soundName}', attempting to play...`);
     
   try {
-        // Special handling for game over sound - make it louder
-        if (soundName === 'gameOver') {
-          audio.volume = 0.5; // Lowered from 1.0
-        } else if (soundName === 'shipHit') {
-          audio.volume = 0.45; // Lowered from 1.0
-        } else if (soundName === 'unlimitedAmmo') { // Added specific case
-          audio.volume = 0.6; // Lowered from the default 0.95
-        } else if (soundName === 'healthWrench') {
-          audio.volume = 0.8; // Maximum volume for health restoration
-        } else if (soundName === 'speech1' || soundName === 'speech2') {
-          audio.volume = 0.80; // Slightly lower volume for captain speech
-        } else {
-          audio.volume = 0.95; // Increased from 0.8 to 0.95 for other sounds
-        }
+      // Get appropriate volume level for this sound effect
+      audio.volume = getSoundEffectVolume(soundName);
       
       // Reset audio to beginning and play
       audio.currentTime = 0;
@@ -374,28 +367,75 @@ export class AudioManager {
     }
   }
   
-  private switchToTheme(themeNumber: 1 | 2): void {
-    if (!this.isThemePlaying) return; // Don't switch if music is not playing
+  private handleTrackEnd(trackIndex: number): void {
+    if (!this.isThemePlaying || this.isCrossfading) return;
     
-    const currentAudio = this.currentTheme === 1 ? this.themeAudio : this.theme2Audio;
-    const nextAudio = themeNumber === 1 ? this.themeAudio : this.theme2Audio;
+    // Pick a random track that's different from the current one
+    this.nextTrackIndex = this.getRandomTrackIndex(trackIndex);
     
-    if (!nextAudio) return;
-    
-    // Stop current theme
-    if (currentAudio) {
-      currentAudio.pause();
-      currentAudio.currentTime = 0;
+    // Start crossfade to next track
+    this.crossfadeToTrack(this.nextTrackIndex);
+  }
+  
+  private getRandomTrackIndex(currentIndex: number): number {
+    // If only one track, return it
+    if (this.musicPlaylist.length <= 1) {
+      return 0;
     }
     
-    // Start next theme
-    this.currentTheme = themeNumber;
-    nextAudio.currentTime = 0;
-    nextAudio.play().catch(error => {
-      console.error(`Failed to switch to theme ${themeNumber}:`, error);
+    // Pick a random track that's not the current one
+    let randomIndex: number;
+    do {
+      randomIndex = Math.floor(Math.random() * this.musicPlaylist.length);
+    } while (randomIndex === currentIndex);
+    
+    return randomIndex;
+  }
+  
+  private crossfadeToTrack(toIndex: number): void {
+    if (this.isCrossfading || !this.audioContext) return;
+    
+    this.isCrossfading = true;
+    const fromIndex = this.currentTrackIndex;
+    const currentTrack = this.musicPlaylist[fromIndex];
+    const nextTrack = this.musicPlaylist[toIndex];
+    const currentGain = this.playlistGainNodes[fromIndex];
+    const nextGain = this.playlistGainNodes[toIndex];
+    
+    if (!currentTrack || !nextTrack || !currentGain || !nextGain) {
+      this.isCrossfading = false;
+      return;
+    }
+    
+    // Get current volume level (based on game state)
+    const targetVolume = getMusicVolumeForState(this.currentGameState);
+    
+    const now = this.audioContext.currentTime;
+    const fadeTime = MUSIC_LEVELS.CROSSFADE_DURATION;
+    
+    console.log(`🎵 Crossfading from track ${fromIndex} to random track ${toIndex} over ${fadeTime}s`);
+    
+    // Start next track at beginning with zero volume
+    nextTrack.currentTime = 0;
+    nextGain.gain.value = 0;
+    nextTrack.play().catch(error => {
+      console.error(`Failed to play next track:`, error);
+      this.isCrossfading = false;
     });
     
-    console.log(`Switched to theme ${themeNumber}`);
+    // Crossfade: fade out current, fade in next
+    currentGain.gain.exponentialRampToValueAtTime(0.001, now + fadeTime); // Fade out
+    nextGain.gain.exponentialRampToValueAtTime(targetVolume, now + fadeTime); // Fade in
+    
+    // Update current track index after fade completes
+    setTimeout(() => {
+      currentTrack.pause();
+      currentTrack.currentTime = 0;
+      currentGain.gain.value = 0;
+      this.currentTrackIndex = toIndex;
+      this.isCrossfading = false;
+      console.log(`✅ Crossfade complete, now playing track ${toIndex}`);
+    }, fadeTime * 1000);
   }
   
   public async startThemeMusic(): Promise<void> {
@@ -406,8 +446,8 @@ export class AudioManager {
     
     if (this.isThemePlaying) return;
     
-    const currentAudio = this.currentTheme === 1 ? this.themeAudio : this.theme2Audio;
-    if (!currentAudio) return;
+    const currentTrack = this.musicPlaylist[this.currentTrackIndex];
+    if (!currentTrack) return;
     
     try {
       // Resume audio context if suspended (required for user interaction)
@@ -415,55 +455,61 @@ export class AudioManager {
         await this.audioContext.resume();
       }
       
-      await currentAudio.play();
+      await currentTrack.play();
       this.isThemePlaying = true;
-      console.log(`Theme ${this.currentTheme} music started`);
+      console.log(`🎵 Playlist started with track ${this.currentTrackIndex}`);
     } catch (error) {
-      console.error('Failed to start theme music:', error);
+      console.error('Failed to start playlist:', error);
     }
   }
   
   public stopThemeMusic(): void {
     if (!this.isThemePlaying) return;
     
-    // Stop both themes
-    if (this.themeAudio) {
-      this.themeAudio.pause();
-      this.themeAudio.currentTime = 0;
-    }
-    if (this.theme2Audio) {
-      this.theme2Audio.pause();
-      this.theme2Audio.currentTime = 0;
-    }
+    // Stop all tracks in playlist
+    this.musicPlaylist.forEach((track, index) => {
+      track.pause();
+      track.currentTime = 0;
+      if (this.playlistGainNodes[index]) {
+        this.playlistGainNodes[index].gain.value = 0;
+      }
+    });
     
     this.isThemePlaying = false;
-    this.currentTheme = 1; // Reset to theme 1
-    console.log('Theme music stopped');
+    this.isCrossfading = false;
+    
+    // Pick a random track for next play
+    this.currentTrackIndex = Math.floor(Math.random() * this.musicPlaylist.length);
+    if (this.playlistGainNodes[this.currentTrackIndex]) {
+      this.playlistGainNodes[this.currentTrackIndex].gain.value = MUSIC_LEVELS.MENU;
+    }
+    
+    console.log(`🎵 Playlist stopped (next start: track ${this.currentTrackIndex})`);
   }
   
   public pauseThemeMusic(): void {
     if (!this.isThemePlaying) return;
     
-    const currentAudio = this.currentTheme === 1 ? this.themeAudio : this.theme2Audio;
-    if (currentAudio) {
-      currentAudio.pause();
+    const currentTrack = this.musicPlaylist[this.currentTrackIndex];
+    if (currentTrack) {
+      currentTrack.pause();
     }
     
     this.isThemePlaying = false;
-    console.log(`Theme ${this.currentTheme} music paused`);
+    console.log(`🎵 Track ${this.currentTrackIndex} paused`);
   }
   
   public resumeThemeMusic(): void {
     if (this.isThemePlaying) return;
     
-    const currentAudio = this.currentTheme === 1 ? this.themeAudio : this.theme2Audio;
-    if (!currentAudio) return;
+    const currentTrack = this.musicPlaylist[this.currentTrackIndex];
+    if (!currentTrack) return;
     
-    currentAudio.play().catch(error => {
-      console.error('Failed to resume theme music:', error);
+    currentTrack.play().catch(error => {
+      console.error('Failed to resume playlist:', error);
     });
     this.isThemePlaying = true;
-    console.log(`Theme ${this.currentTheme} music resumed`);
+    console.log(`🎵 Track ${this.currentTrackIndex} resumed`);
   }
   
   private setThemeVolume(volume: number): void {
@@ -472,19 +518,26 @@ export class AudioManager {
     if (this.isMuted) {
       // If muted, store the volume but don't apply it
       this.themeVolumeBeforeMute = clampedVolume;
+      console.log(`🔇 Muted - storing volume ${clampedVolume * 100}% for later`);
     } else {
-      // If not muted, apply the volume directly
-      if (this.themeAudio) {
-        this.themeAudio.volume = clampedVolume;
-      }
-      if (this.theme2Audio) {
-        this.theme2Audio.volume = clampedVolume;
+      // Apply volume to current playing track's gain node
+      const currentGain = this.playlistGainNodes[this.currentTrackIndex];
+      if (currentGain && this.audioContext) {
+        const targetVolume = Math.max(0.001, clampedVolume);
+        // Smooth volume transition
+        currentGain.gain.exponentialRampToValueAtTime(
+          targetVolume,
+          this.audioContext.currentTime + 0.1
+        );
+        console.log(`🎚️ Track ${this.currentTrackIndex} gain ramping to ${targetVolume * 100}%`);
+      } else {
+        console.warn(`⚠️ Could not set volume - gain node missing for track ${this.currentTrackIndex}`);
       }
     }
     
     // Sync sound effects volume with music volume
     this.setSoundEffectsVolume(volume);
-    
+
     // Set speech volume to maximum (always loudest)
     this.setSpeechVolume(volume);
   }
@@ -499,7 +552,7 @@ export class AudioManager {
   private setSpeechVolume(volume: number): void {
     if (this.speechGain) {
       // Speech at maximum volume - always loudest element in the mix
-      this.speechGain.gain.value = this.SPEECH_VOLUME;
+      this.speechGain.gain.value = VOICE_LEVELS.SPEECH_BASE;
     }
   }
   
@@ -507,26 +560,18 @@ export class AudioManager {
     const previousState = this.currentGameState;
     this.currentGameState = newState;
     
-    // Adjust theme music volume based on game state
-    switch (newState) {
-      case GameState.MENU:
-      case GameState.PAUSED:
-      case GameState.GAME_OVER:
-        this.setThemeVolume(this.MENU_VOLUME);
-        if (!this.isThemePlaying) {
-          this.startThemeMusic();
-        }
-        break;
-        
-      case GameState.PLAYING:
-        this.setThemeVolume(this.GAMEPLAY_VOLUME);
-        if (!this.isThemePlaying) {
-          this.startThemeMusic();
-        }
-        break;
+    // Get appropriate music volume for the new game state
+    const targetVolume = getMusicVolumeForState(newState);
+    
+    console.log(`🎚️ Setting music to ${newState.toUpperCase()} volume: ${targetVolume * 100}%`);
+    this.setThemeVolume(targetVolume);
+    
+    // Start theme music if not already playing
+    if (!this.isThemePlaying) {
+      this.startThemeMusic();
     }
     
-    console.log(`Game state changed from ${previousState} to ${newState}`);
+    console.log(`🎮 Game state changed: ${previousState} → ${newState}`);
   }
   
   public getCurrentGameState(): GameState {
@@ -591,13 +636,10 @@ export class AudioManager {
         this.masterGain.gain.value = 0;
       }
       
-      // Store and mute theme music volumes
-      if (this.themeAudio) {
-        this.themeVolumeBeforeMute = this.themeAudio.volume;
-        this.themeAudio.volume = 0;
-      }
-      if (this.theme2Audio) {
-        this.theme2Audio.volume = 0;
+      // Store current track volume before muting
+      const currentGain = this.playlistGainNodes[this.currentTrackIndex];
+      if (currentGain) {
+        this.themeVolumeBeforeMute = currentGain.gain.value;
       }
     } else {
       // Restore previous volumes when unmuting
@@ -605,12 +647,13 @@ export class AudioManager {
         this.masterGain.gain.value = this.volumeBeforeMute;
       }
       
-      // Restore theme music volumes
-      if (this.themeAudio) {
-        this.themeAudio.volume = this.themeVolumeBeforeMute;
-      }
-      if (this.theme2Audio) {
-        this.theme2Audio.volume = this.themeVolumeBeforeMute;
+      // Restore current track volume
+      const currentGain = this.playlistGainNodes[this.currentTrackIndex];
+      if (currentGain && this.audioContext) {
+        currentGain.gain.exponentialRampToValueAtTime(
+          Math.max(0.001, this.themeVolumeBeforeMute),
+          this.audioContext.currentTime + 0.1
+        );
       }
     }
   }
@@ -632,7 +675,7 @@ export class AudioManager {
       this.idleFadeoutScheduled = false;
       
       // Reset gains to idle state (idle at full, thrust at zero)
-      this.shipIdleGain.gain.value = this.SHIP_ENGINE_VOLUME;
+      this.shipIdleGain.gain.value = AMBIENT_LEVELS.SHIP_ENGINE;
       this.shipThrustGain.gain.value = 0;
       
       // Start both loops at the same time (they'll crossfade based on state)
@@ -690,7 +733,7 @@ export class AudioManager {
       this.shipThrustGain.gain.setValueAtTime(this.shipThrustGain.gain.value, now);
       
       // Fade idle in, thrust out
-      this.shipIdleGain.gain.exponentialRampToValueAtTime(this.SHIP_ENGINE_VOLUME, now + fadeTime);
+      this.shipIdleGain.gain.exponentialRampToValueAtTime(AMBIENT_LEVELS.SHIP_ENGINE, now + fadeTime);
       this.shipThrustGain.gain.exponentialRampToValueAtTime(0.001, now + fadeTime);
       
       // Schedule idle fadeout after delay (for transition purposes only)
@@ -725,14 +768,14 @@ export class AudioManager {
       // If idle was faded out, bring it back up first so the transition is smooth
       if (this.shipIdleGain.gain.value < 0.01) {
         // Idle is silent, fade it up briefly for smooth transition
-        this.shipIdleGain.gain.exponentialRampToValueAtTime(this.SHIP_ENGINE_VOLUME * 0.3, now + fadeTime * 0.3);
+        this.shipIdleGain.gain.exponentialRampToValueAtTime(AMBIENT_LEVELS.SHIP_ENGINE * 0.3, now + fadeTime * 0.3);
         this.shipIdleGain.gain.exponentialRampToValueAtTime(0.001, now + fadeTime);
       } else {
         // Normal idle fadeout
         this.shipIdleGain.gain.exponentialRampToValueAtTime(0.001, now + fadeTime);
       }
       
-      this.shipThrustGain.gain.exponentialRampToValueAtTime(this.SHIP_ENGINE_VOLUME, now + fadeTime);
+      this.shipThrustGain.gain.exponentialRampToValueAtTime(AMBIENT_LEVELS.SHIP_ENGINE, now + fadeTime);
       
       console.log('🔥 Crossfading to THRUST engine');
     }
@@ -766,20 +809,20 @@ export class AudioManager {
     
     // Clean up Web Audio API sources
     this.soundEffectSources.clear();
+    this.playlistSources = [];
+    this.playlistGainNodes = [];
+    this.musicPlaylist = [];
     
     if (this.audioContext) {
       this.audioContext.close();
     }
     
-    this.themeAudio = null;
     this.audioContext = null;
     this.masterGain = null;
     this.musicGain = null;
     this.soundEffectsGain = null;
     this.masterLowpassFilter = null;
-    this.masterCompressor = null;
-    this.masterLimiter = null;
-    this.makeupGain = null;
+    this.audioEffects = null;
   }
 }
 

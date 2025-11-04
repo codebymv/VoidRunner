@@ -87,8 +87,8 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 onClick={handleJoystickToggle}
                 className={`w-full text-left px-3 py-2 text-sm rounded transition-colors ${
                   showJoystick 
-                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
-                    : 'text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400'
+                    ? 'bg-card/60 text-muted-foreground border border-blue-500/40 hover:bg-card/60 hover:text-muted-foreground' 
+                    : 'text-muted-foreground hover:text-muted-foreground'
                 }`}
               >
                 <span>Joystick (J)</span>
@@ -100,8 +100,8 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
               onClick={handleMuteToggle}
               className={`w-full text-left px-3 py-2 text-sm rounded transition-colors ${
                 isMuted 
-                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
-                  : 'text-muted-foreground hover:bg-blue-500/10 hover:text-blue-400'
+                  ? 'bg-card/60 text-muted-foreground border border-blue-500/40 hover:bg-card/60 hover:text-muted-foreground' 
+                  : 'text-muted-foreground hover:text-muted-foreground'
               }`}
             >
               <span>Mute (M)</span>
