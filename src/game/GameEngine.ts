@@ -12,6 +12,7 @@ import type {
   Bullet,
   AmmoPowerUp
 } from './types';
+import { ParticlePool, ANGLE_LUT } from '../utils/ParticlePool';
 
 /**
  * GameEngine - Headless game logic engine
@@ -54,6 +55,9 @@ export class GameEngine {
   // Callbacks to communicate with React
   public callbacks: GameEngineCallbacks;
   
+  // Particle pool for optimized particle management
+  private particlePool: ParticlePool;
+  
   // Configuration
   private canvasWidth: number;
   private canvasHeight: number;
@@ -70,6 +74,9 @@ export class GameEngine {
     this.mobileScaleFactor = mobileScaleFactor;
     this.callbacks = callbacks;
 
+    // Initialize particle pool (max 500 particles for performance)
+    this.particlePool = new ParticlePool(500);
+
     // Initialize game state
     this.state = {
       ship: {
@@ -84,7 +91,7 @@ export class GameEngine {
       stars: [],
       scraps: [],
       healthWrenches: [],
-      particles: [],
+      particles: this.particlePool.getActive(), // Use pooled particles
       shipTrails: [],
       bullets: [],
       ammoPowerUps: [],
@@ -152,9 +159,12 @@ export class GameEngine {
 
   /**
    * Set particles from external source (for testing integration)
+   * Note: With particle pooling, external particles are not used.
+   * This method is kept for backwards compatibility but is a no-op.
    */
   public setParticles(particles: Particle[]): void {
-    this.state.particles = particles;
+    // No-op: particle pool manages particles internally
+    console.warn('setParticles() is deprecated with particle pooling');
   }
 
   /**
@@ -720,7 +730,8 @@ export class GameEngine {
     this.state.scraps = [];
     this.state.healthWrenches = [];
     this.state.bullets = [];
-    this.state.particles = [];
+    this.particlePool.reset(); // Reset particle pool (OPTIMIZED)
+    this.state.particles = this.particlePool.getActive(); // Keep reference
     this.state.shipTrails = [];
     this.state.ammoPowerUps = [];
     this.state.difficulty = 1;
@@ -952,13 +963,8 @@ export class GameEngine {
              scrap.y > -50 && scrap.y < this.canvasHeight + 50;
     });
 
-      // Update particles
-      this.state.particles = this.state.particles.filter(p => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life -= 0.02;
-        return p.life > 0;
-      });
+      // Update particles using object pool (OPTIMIZED)
+      this.particlePool.update(delta);
 
       // Update bullets
       this.state.bullets = this.state.bullets.filter(bullet => {
@@ -1441,12 +1447,12 @@ export class GameEngine {
           
           planet.health = (planet.health || planet.maxHealth || 100) - damage;
           
-          // Apply knockback force
+          // Apply knockback force (INCREASED for more satisfying shooting)
           const bulletSpeed = Math.sqrt(bullet.vx * bullet.vx + bullet.vy * bullet.vy);
           if (bulletSpeed > 0) {
             const bulletDirX = bullet.vx / bulletSpeed;
             const bulletDirY = bullet.vy / bulletSpeed;
-            const knockbackStrength = (damage * 0.5) / Math.sqrt(planet.mass);
+            const knockbackStrength = (damage * 0.75) / Math.sqrt(planet.mass);
             planet.vx += bulletDirX * knockbackStrength;
             planet.vy += bulletDirY * knockbackStrength;
           }
@@ -1908,21 +1914,10 @@ export class GameEngine {
   }
 
   /**
-   * Create particle effects at a specific location
+   * Create particle effects at a specific location (OPTIMIZED with pooling)
    */
   private createParticles(x: number, y: number, color: string, count = 10): void {
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 2 + Math.random() * 3;
-      this.state.particles.push({
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 1,
-        color
-      });
-    }
+    this.particlePool.createBurst(x, y, color, count, ANGLE_LUT);
   }
 
   /**

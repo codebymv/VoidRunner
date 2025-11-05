@@ -1466,13 +1466,13 @@ export const GameCanvas = () => {
             const damage = calculateDamage(planet.type, bullet.isPurple);
             planet.health = (planet.health || planet.maxHealth || 100) - damage;
             
-            // Apply knockback force in bullet direction
+            // Apply knockback force in bullet direction (INCREASED for more satisfying shooting)
             // Knockback is proportional to damage and inversely proportional to mass
             const bulletSpeed = Math.sqrt(bullet.vx * bullet.vx + bullet.vy * bullet.vy);
             if (bulletSpeed > 0) {
               const bulletDirX = bullet.vx / bulletSpeed;
               const bulletDirY = bullet.vy / bulletSpeed;
-              const knockbackStrength = (damage * 0.5) / Math.sqrt(planet.mass); // Stronger knockback for more noticeable effect
+              const knockbackStrength = (damage * 0.75) / Math.sqrt(planet.mass); // Increased from 0.5 to 0.75
               planet.vx += bulletDirX * knockbackStrength;
               planet.vy += bulletDirY * knockbackStrength;
             }

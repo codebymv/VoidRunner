@@ -167,18 +167,33 @@ export class Renderer {
   }
 
   /**
-   * Phase 3: Render particles
+   * Phase 3: Render particles (OPTIMIZED)
+   * Uses fillRect for speed and batches by color to reduce draw calls
    */
   private renderParticles(ctx: CanvasRenderingContext2D, state: any): void {
     if (!state.particles || state.particles.length === 0) return;
     
+    // Batch particles by color for efficient rendering
+    const particlesByColor = new Map<string, Array<{x: number, y: number, life: number}>>();
+    
     state.particles.forEach((p: any) => {
-      ctx.globalAlpha = p.life;
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
-      ctx.fill();
+      if (!particlesByColor.has(p.color)) {
+        particlesByColor.set(p.color, []);
+      }
+      particlesByColor.get(p.color)!.push({ x: p.x, y: p.y, life: p.life });
     });
+    
+    // Render each color group in batch
+    particlesByColor.forEach((particles, color) => {
+      ctx.fillStyle = color;
+      
+      particles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        // Use fillRect instead of arc for 2px particles - much faster
+        ctx.fillRect(p.x - 1, p.y - 1, 2, 2);
+      });
+    });
+    
     ctx.globalAlpha = 1;
   }
 

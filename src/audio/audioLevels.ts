@@ -9,10 +9,10 @@
  */
 export const MUSIC_LEVELS = {
   /** Menu music volume - 9% for subtle background atmosphere */
-  MENU: 0.08,
+  MENU: 0.07,
   
   /** Gameplay music volume - 11% to stay under gameplay sounds */
-  GAMEPLAY: 0.10,
+  GAMEPLAY: 0.09,
   
   /** Crossfade duration between tracks in seconds */
   CROSSFADE_DURATION: 3.0,
@@ -24,19 +24,19 @@ export const MUSIC_LEVELS = {
  */
 export const SOUND_EFFECT_LEVELS = {
   /** Maximum volume for shooting sounds - 100% */
-  SHOOTING: 1.2,
+  SHOOTING: 1.5,
   
   /** Shield activation sound - 30% (subtle) */
-  SHIELD_ACTIVATE: 0.30,
+  SHIELD_ACTIVATE: 0.40,
   
   /** Star collection sounds - 40% (moderate) */
-  STAR_ACQUIRE: 0.50,
+  STAR_ACQUIRE: 0.70,
   
   /** Game over sound - 35% (moderate) */
-  GAME_OVER: 0.45,
+  GAME_OVER: 0.5,
   
   /** Default sound effect volume - 100% */
-  DEFAULT: 1.0,
+  DEFAULT: 1.5,
 } as const;
 
 /**
