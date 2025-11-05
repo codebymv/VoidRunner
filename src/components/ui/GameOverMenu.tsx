@@ -52,11 +52,7 @@ export const GameOverMenu = ({
             )}
           </div>
           <div className="text-lg sm:text-xl text-muted-foreground">
-            Previous High Score: <span className={`font-bold ${
-              previousHighScore >= highScore && previousHighScore > 0
-                ? 'text-yellow-400 glow-yellow'
-                : 'text-blue-400 glow-blue'
-            }`}>{previousHighScore > 0 ? previousHighScore : 'None'}</span>
+            Previous High Score: <span className="font-bold text-yellow-400 glow-yellow">{previousHighScore > 0 ? previousHighScore : 'None'}</span>
           </div>
         </div>
         

@@ -1,6 +1,7 @@
 import themeMusic from '../assets/theme.mp3';
 import theme2Music from '../assets/theme2.mp3';
 import theme3Music from '../assets/theme3.mp3';
+import theme4Music from '../assets/theme4.mp3';
 import gameOverSound from '../assets/game_over.mp3';
 import healthWrenchSound from '../assets/health_wrench.mp3';
 import shieldActivateSound from '../assets/shield_activate.mp3';
@@ -134,7 +135,7 @@ export class AudioManager {
       
       // Initialize music playlist system with crossfading
       // To add more songs, import them at the top and add to this array:
-      const playlist = [themeMusic, theme2Music, theme3Music];
+      const playlist = [themeMusic, theme2Music, theme3Music, theme4Music];
       
       for (let i = 0; i < playlist.length; i++) {
         const audio = new Audio(playlist[i]);

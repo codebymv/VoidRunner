@@ -13,6 +13,7 @@ import type {
   AmmoPowerUp
 } from './types';
 import { ParticlePool, ANGLE_LUT } from '../utils/ParticlePool';
+import { SpatialGrid } from '../utils/SpatialGrid';
 
 /**
  * GameEngine - Headless game logic engine
@@ -58,6 +59,9 @@ export class GameEngine {
   // Particle pool for optimized particle management
   private particlePool: ParticlePool;
   
+  // Spatial grid for optimized collision detection
+  private spatialGrid: SpatialGrid;
+  
   // Configuration
   private canvasWidth: number;
   private canvasHeight: number;
@@ -76,6 +80,10 @@ export class GameEngine {
 
     // Initialize particle pool (max 500 particles for performance)
     this.particlePool = new ParticlePool(500);
+
+    // Initialize spatial grid (cell size = 200px, roughly 2x largest object radius)
+    // This optimizes collision detection from O(n²) to O(n)
+    this.spatialGrid = new SpatialGrid(200);
 
     // Initialize game state
     this.state = {
@@ -1049,13 +1057,22 @@ export class GameEngine {
   }
 
   /**
-   * Check obstacle-obstacle collisions (the big one!)
+   * Check obstacle-obstacle collisions (OPTIMIZED with spatial grid!)
+   * Reduces collision checks from O(n²) to O(n) using broad-phase detection
    */
   private checkObstacleCollisions(): void {
-    // First pass: General debris bouncing system
+    // Build spatial grid (broad-phase)
+    this.spatialGrid.clear();
+    this.state.planets.forEach(planet => this.spatialGrid.insert(planet));
+    
+    // First pass: General debris bouncing system (OPTIMIZED)
     this.state.planets.forEach((debris, debrisIndex) => {
       if (debris.type === "debris" && debris.canBounce && debris.bounceCount < 3) {
-        this.state.planets.forEach((otherPlanet, otherIndex) => {
+        // OPTIMIZATION: Only check nearby planets instead of all planets
+        const nearbyPlanets = this.spatialGrid.getNearby(debris);
+        
+        nearbyPlanets.forEach((otherPlanet) => {
+          const otherIndex = this.state.planets.indexOf(otherPlanet);
           if (debrisIndex !== otherIndex) {
             const dx = debris.x - otherPlanet.x;
             const dy = debris.y - otherPlanet.y;
@@ -1100,9 +1117,13 @@ export class GameEngine {
       }
     });
 
-    // Second pass: Specific collision type interactions
+    // Second pass: Specific collision type interactions (OPTIMIZED)
     this.state.planets.forEach((planet1, index1) => {
-      this.state.planets.forEach((planet2, index2) => {
+      // OPTIMIZATION: Only check nearby planets instead of all planets
+      const nearbyPlanets = this.spatialGrid.getNearby(planet1);
+      
+      nearbyPlanets.forEach((planet2) => {
+        const index2 = this.state.planets.indexOf(planet2);
         if (index1 >= index2) return; // Avoid duplicate checks and self-collision
         
         const dx = planet1.x - planet2.x;
