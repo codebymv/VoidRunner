@@ -756,8 +756,8 @@ export const GameCanvas = () => {
             showPickupNotification(message, className);
           },
           onPlaySound: (soundName: string) => {
-            // Sound playback handled via AudioManager globally
-            console.log("Play sound:", soundName);
+            // Play the sound requested by the game engine
+            playSound(soundName).catch(console.error);
           },
           onHealthGlow: (duration: number) => {
             healthGlowEndTimeRef.current = Date.now() + duration;
