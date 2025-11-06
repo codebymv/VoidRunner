@@ -308,11 +308,13 @@ export class AudioManager {
         const shieldAudio = this.shieldSoundPool[this.shieldPoolIndex];
         this.shieldPoolIndex = (this.shieldPoolIndex + 1) % this.shieldSoundPool.length;
         
-        // Reset audio to beginning and play
-        shieldAudio.currentTime = 0;
-        shieldAudio.play().catch(error => {
-          console.error(`Failed to play shield sound:`, error);
-        });
+      // Set the correct volume
+      shieldAudio.volume = getSoundEffectVolume('shieldActivate'); // This is 0.40
+      // Reset audio to beginning and play
+      shieldAudio.currentTime = 0;
+      shieldAudio.play().catch(error => {
+        console.error(`Failed to play shield sound:`, error);
+      });
       } catch (error) {
         console.error(`Error playing shield sound:`, error);
       }
@@ -343,30 +345,55 @@ export class AudioManager {
       return;
     }
 
-    // Regular sound effect handling
-    const audio = this.soundEffects.get(soundName);
-    if (!audio) {
-      console.warn(`❌ Sound effect '${soundName}' not found in soundEffects map`);
-      console.log('Available sounds:', Array.from(this.soundEffects.keys()));
-      return;
-    }
-    
-    console.log(`✅ Found sound '${soundName}', attempting to play...`);
-    
-  try {
-      // Get appropriate volume level for this sound effect
-      audio.volume = getSoundEffectVolume(soundName);
-      
-      // Reset audio to beginning and play
-      audio.currentTime = 0;
-      console.log(`🎵 Playing sound '${soundName}' at volume ${audio.volume}`);
-      audio.play().catch(error => {
-        console.error(`❌ Failed to play sound '${soundName}':`, error);
-      });
-    } catch (error) {
-      console.error(`❌ Error playing sound '${soundName}':`, error);
-    }
+// Regular sound effect handling
+const audio = this.soundEffects.get(soundName);
+const sourceNode = this.soundEffectSources.get(soundName);
+
+if (!audio || !sourceNode || !this.audioContext || !this.soundEffectsGain) {
+  console.warn(`❌ Sound effect '${soundName}' or its source not found`);
+  console.log('Available sounds:', Array.from(this.soundEffects.keys()));
+  return;
+}
+
+console.log(`✅ Found sound '${soundName}', attempting to play...`);
+
+try {
+  // Get the desired volume (e.g., 1.5 for shooting)
+  const individualVolume = getSoundEffectVolume(soundName);
+
+  // --- NEW VOLUME LOGIC ---
+  // Create a new, temporary GainNode for this specific sound
+  const soundGain = this.audioContext.createGain();
+  soundGain.gain.value = individualVolume;
+
+  // Connect the shared source to our new gain, and our new gain to the main SFX bus
+  // sourceNode -> soundGain (1.5) -> soundEffectsGain (0.8) -> master
+  sourceNode.disconnect(this.soundEffectsGain); // Disconnect old path
+  sourceNode.connect(soundGain);
+  soundGain.connect(this.soundEffectsGain);
+
+  // Reset audio to beginning and play
+  audio.currentTime = 0;
+  console.log(`🎵 Playing sound '${soundName}' at volume ${individualVolume}`);
+  audio.play().catch(error => {
+    console.error(`❌ Failed to play sound '${soundName}':`, error);
+  });
+
+  // IMPORTANT: Re-connect the source to the main bus after it finishes playing
+  audio.onended = () => {
+    soundGain.disconnect();
+    sourceNode.disconnect(soundGain);
+    sourceNode.connect(this.soundEffectsGain!);
+  };
+
+} catch (error) {
+  console.error(`❌ Error playing sound '${soundName}':`, error);
+  // Ensure connection is restored even if play fails
+  if (sourceNode && this.soundEffectsGain) {
+    sourceNode.connect(this.soundEffectsGain);
   }
+}
+}
   
   private handleTrackEnd(trackIndex: number): void {
     if (!this.isThemePlaying || this.isCrossfading) return;
