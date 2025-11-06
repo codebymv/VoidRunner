@@ -15,7 +15,7 @@ export interface AudioEffectsChain {
  */
 export const COMPRESSION_SETTINGS = {
   /** Start compressing at -30dB (less aggressive, more headroom) */
-  THRESHOLD: -30,
+  THRESHOLD: -20,
   
   /** Softer knee for gentler, more musical compression */
   KNEE: 8,
@@ -60,7 +60,7 @@ export const MAKEUP_GAIN_SETTINGS = {
    * Linear gain multiplier: 1.5 ≈ +3.5dB boost
    * Compensates for compression without over-driving
    */
-  GAIN: 1.5,
+  GAIN: 1.3,
 } as const;
 
 /**
