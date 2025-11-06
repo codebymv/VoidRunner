@@ -8,11 +8,11 @@
  * Music is kept subtle to let gameplay sounds dominate
  */
 export const MUSIC_LEVELS = {
-  /** Menu music volume - 13% for subtle background atmosphere */
-  MENU: 0.13,
+  /** Menu music volume - 16% for subtle background atmosphere */
+  MENU: 0.16,
   
-  /** Gameplay music volume - 13% to stay under gameplay sounds */
-  GAMEPLAY: 0.15,
+  /** Gameplay music volume - 18% to stay under gameplay sounds */
+  GAMEPLAY: 0.18,
   
   /** Crossfade duration between tracks in seconds */
   CROSSFADE_DURATION: 3.0,
@@ -56,8 +56,8 @@ export const VOICE_LEVELS = {
  * Background ambience for atmosphere
  */
 export const AMBIENT_LEVELS = {
-  /** Ship engine background ambience - 15% */
-  SHIP_ENGINE: 0.17,
+  /** Ship engine background ambience - 22% */
+  SHIP_ENGINE: 0.22,
 } as const;
 
 /**
