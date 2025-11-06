@@ -8,11 +8,11 @@
  * Music is kept subtle to let gameplay sounds dominate
  */
 export const MUSIC_LEVELS = {
-  /** Menu music volume - 11% for subtle background atmosphere */
-  MENU: 0.11,
+  /** Menu music volume - 13% for subtle background atmosphere */
+  MENU: 0.13,
   
   /** Gameplay music volume - 13% to stay under gameplay sounds */
-  GAMEPLAY: 0.13,
+  GAMEPLAY: 0.15,
   
   /** Crossfade duration between tracks in seconds */
   CROSSFADE_DURATION: 3.0,
@@ -24,7 +24,7 @@ export const MUSIC_LEVELS = {
  */
 export const SOUND_EFFECT_LEVELS = {
   /** Maximum volume for shooting sounds - 100% */
-  SHOOTING: 1.15,
+  SHOOTING: 0.8,
   
   /** Shield activation sound - 30% (subtle) */
   SHIELD_ACTIVATE: 0.40,
