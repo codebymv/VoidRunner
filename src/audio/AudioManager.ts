@@ -513,7 +513,7 @@ export class AudioManager {
     console.log(`🎵 Track ${this.currentTrackIndex} resumed`);
   }
   
-  private setThemeVolume(volume: number): void {
+private setThemeVolume(volume: number): void {
     const clampedVolume = Math.max(0, Math.min(1, volume));
     
     if (this.isMuted) {
@@ -534,13 +534,13 @@ export class AudioManager {
       } else {
         console.warn(`⚠️ Could not set volume - gain node missing for track ${this.currentTrackIndex}`);
       }
-    }
-    
-    // Sync sound effects volume with music volume
-    this.setSoundEffectsVolume(volume);
+      
+      // Sync sound effects volume 
+      this.setSoundEffectsVolume(); // <-- Correct
 
-    // Set speech volume to maximum (always loudest)
-    this.setSpeechVolume(volume);
+      // Set speech volume to maximum
+      this.setSpeechVolume(); // <-- Correct
+    }
   }
   
     // In AudioManager.ts
@@ -551,12 +551,12 @@ export class AudioManager {
       }
     }
 
-  private setSpeechVolume(volume: number): void {
-    if (this.speechGain) {
-      // Speech at maximum volume - always loudest element in the mix
-      this.speechGain.gain.value = VOICE_LEVELS.SPEECH_BASE;
-    }
+private setSpeechVolume(): void { // <-- REMOVE (volume: number)
+  if (this.speechGain) {
+    // Speech at maximum volume - always loudest element in the mix
+    this.speechGain.gain.value = VOICE_LEVELS.SPEECH_BASE;
   }
+}
   
   public setGameState(newState: GameState): void {
     const previousState = this.currentGameState;
