@@ -32,6 +32,21 @@ export class Renderer {
   private canvasWidth: number = 0;
   private canvasHeight: number = 0;
 
+  /**
+   * Check if an object is visible on screen (for render culling optimization)
+   * @param x - Object x position
+   * @param y - Object y position
+   * @param radius - Object radius (approximate size)
+   * @returns true if object is visible or near visible area
+   */
+  private isVisible(x: number, y: number, radius: number): boolean {
+    const buffer = radius + 50; // Buffer zone to include objects near screen edge
+    return x >= -buffer && 
+           x <= this.canvasWidth + buffer &&
+           y >= -buffer && 
+           y <= this.canvasHeight + buffer;
+  }
+
   constructor() {
     // Initialize all images (they'll be loaded via the component's img refs)
     this.shipIdleImg = new Image();
@@ -177,6 +192,9 @@ export class Renderer {
     const particlesByColor = new Map<string, Array<{x: number, y: number, life: number}>>();
     
     state.particles.forEach((p: any) => {
+      // Render culling: Skip particles outside viewport
+      if (!this.isVisible(p.x, p.y, 2)) return;
+      
       if (!particlesByColor.has(p.color)) {
         particlesByColor.set(p.color, []);
       }
@@ -206,6 +224,9 @@ export class Renderer {
     const isUnlimitedAmmo = options.isUnlimitedAmmo || false;
     
     state.bullets.forEach((bullet: any) => {
+      // Render culling: Skip bullets outside viewport
+      if (!this.isVisible(bullet.x, bullet.y, bullet.radius)) return;
+      
       // Calculate fade based on lifetime
       const lifetimePercent = bullet.lifetime / bullet.maxLifetime;
       const opacity = 1 - lifetimePercent * 0.5; // Fade out as it ages
@@ -278,6 +299,9 @@ export class Renderer {
     if (!state.planets || state.planets.length === 0) return;
     
     state.planets.forEach((planet: any) => {
+      // Render culling: Skip planets outside viewport
+      if (!this.isVisible(planet.x, planet.y, planet.radius)) return;
+      
       if (planet.type === "meteor" && this.meteorImg && this.meteorImg.complete) {
         // Render meteor sprite with rotation
         ctx.save();
@@ -373,6 +397,9 @@ export class Renderer {
 
     // Apply white flash effect to damaged obstacles
     state.planets.forEach((planet: any) => {
+      // Render culling: Skip planets outside viewport
+      if (!this.isVisible(planet.x, planet.y, planet.radius)) return;
+      
       if (planet.flashUntil && Date.now() < planet.flashUntil) {
         ctx.save();
         
@@ -404,6 +431,9 @@ export class Renderer {
     const score = options.score || 0;
     
     state.stars.forEach((star: any) => {
+      // Render culling: Skip stars outside viewport
+      if (!this.isVisible(star.x, star.y, star.radius)) return;
+      
       ctx.save();
       ctx.shadowBlur = 15;
       
@@ -451,6 +481,9 @@ export class Renderer {
     // Render scraps
     if (state.scraps && state.scraps.length > 0) {
       state.scraps.forEach((scrap: any) => {
+        // Render culling: Skip scraps outside viewport
+        if (!this.isVisible(scrap.x, scrap.y, scrap.radius)) return;
+        
         if (this.scrapImg && this.scrapImg.complete) {
           ctx.save();
           ctx.shadowBlur = 15;
@@ -473,6 +506,9 @@ export class Renderer {
     // Render health wrenches
     if (state.healthWrenches && state.healthWrenches.length > 0) {
       state.healthWrenches.forEach((wrench: any) => {
+        // Render culling: Skip wrenches outside viewport
+        if (!this.isVisible(wrench.x, wrench.y, wrench.radius)) return;
+        
         ctx.save();
         
         wrench.pulsePhase = (wrench.pulsePhase || 0) + 0.1;
@@ -493,6 +529,9 @@ export class Renderer {
     if (state.ammoPowerUps && state.ammoPowerUps.length > 0) {
       state.ammoPowerUps.forEach((powerUp: any) => {
         if (powerUp.collected) return;
+        
+        // Render culling: Skip power-ups outside viewport
+        if (!this.isVisible(powerUp.x, powerUp.y, powerUp.radius)) return;
         
         ctx.save();
         
@@ -516,6 +555,9 @@ export class Renderer {
     if (state.voidWipes && state.voidWipes.length > 0) {
       state.voidWipes.forEach((voidWipe: any) => {
         if (voidWipe.collected) return;
+        
+        // Render culling: Skip void wipes outside viewport
+        if (!this.isVisible(voidWipe.x, voidWipe.y, voidWipe.radius)) return;
         
         ctx.save();
         

@@ -42,7 +42,7 @@ export const createParticles = (
 };
 
 /**
- * Create explosion effect with blast force
+ * Create explosion effect with blast force (optimized with early rejection)
  */
 export const createExplosion = (
   x: number,
@@ -57,25 +57,29 @@ export const createExplosion = (
   createParticles(x, y, "hsl(30, 100%, 80%)", 20, gameState.particles);
   createParticles(x, y, "hsl(60, 100%, 90%)", 15, gameState.particles);
   
-  // Apply blast force to nearby obstacles
+  // Apply blast force to nearby obstacles (optimized with squared distance for early rejection)
+  const blastRadiusSq = blastRadius * blastRadius;
+  
   gameState.planets.forEach((planet, index) => {
     if (excludeIndices.includes(index)) return;
     
     const dx = planet.x - x;
     const dy = planet.y - y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    const distSq = dx * dx + dy * dy;
     
-    if (dist < blastRadius && dist > 0) {
-      const normalX = dx / dist;
-      const normalY = dy / dist;
-      const blastForce = force * (1 - dist / blastRadius); // Force decreases with distance
-      
-      planet.vx += normalX * blastForce;
-      planet.vy += normalY * blastForce;
-      
-      // Create impact particles on affected obstacles
-      createParticles(planet.x, planet.y, "hsl(45, 100%, 60%)", 5, gameState.particles);
-    }
+    // Early rejection with squared distance
+    if (distSq >= blastRadiusSq || distSq === 0) return;
+    
+    const dist = Math.sqrt(distSq); // Only calculate sqrt for planets within blast radius
+    const normalX = dx / dist;
+    const normalY = dy / dist;
+    const blastForce = force * (1 - dist / blastRadius); // Force decreases with distance
+    
+    planet.vx += normalX * blastForce;
+    planet.vy += normalY * blastForce;
+    
+    // Create impact particles on affected obstacles
+    createParticles(planet.x, planet.y, "hsl(45, 100%, 60%)", 5, gameState.particles);
   });
 };
 
@@ -122,7 +126,7 @@ export const createParticles = (
 };
 
 /**
- * Create explosion effect with blast force
+ * Create explosion effect with blast force (optimized with early rejection)
  */
 export const createExplosion = (
   x: number,
@@ -137,25 +141,29 @@ export const createExplosion = (
   createParticles(x, y, "hsl(30, 100%, 80%)", 20, gameState.particles);
   createParticles(x, y, "hsl(60, 100%, 90%)", 15, gameState.particles);
   
-  // Apply blast force to nearby obstacles
+  // Apply blast force to nearby obstacles (optimized with squared distance for early rejection)
+  const blastRadiusSq = blastRadius * blastRadius;
+  
   gameState.planets.forEach((planet, index) => {
     if (excludeIndices.includes(index)) return;
     
     const dx = planet.x - x;
     const dy = planet.y - y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    const distSq = dx * dx + dy * dy;
     
-    if (dist < blastRadius && dist > 0) {
-      const normalX = dx / dist;
-      const normalY = dy / dist;
-      const blastForce = force * (1 - dist / blastRadius); // Force decreases with distance
-      
-      planet.vx += normalX * blastForce;
-      planet.vy += normalY * blastForce;
-      
-      // Create impact particles on affected obstacles
-      createParticles(planet.x, planet.y, "hsl(45, 100%, 60%)", 5, gameState.particles);
-    }
+    // Early rejection with squared distance
+    if (distSq >= blastRadiusSq || distSq === 0) return;
+    
+    const dist = Math.sqrt(distSq); // Only calculate sqrt for planets within blast radius
+    const normalX = dx / dist;
+    const normalY = dy / dist;
+    const blastForce = force * (1 - dist / blastRadius); // Force decreases with distance
+    
+    planet.vx += normalX * blastForce;
+    planet.vy += normalY * blastForce;
+    
+    // Create impact particles on affected obstacles
+    createParticles(planet.x, planet.y, "hsl(45, 100%, 60%)", 5, gameState.particles);
   });
 };
 

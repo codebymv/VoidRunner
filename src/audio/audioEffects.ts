@@ -14,20 +14,20 @@ export interface AudioEffectsChain {
  * Master bus compression for musical glue and cohesion
  */
 export const COMPRESSION_SETTINGS = {
-  /** Start compressing at -30dB (less aggressive, more headroom) */
-  THRESHOLD: -20,
+  /** Start compressing at -12dB (less sensitive, less ducking) */
+  THRESHOLD: -12,
   
   /** Softer knee for gentler, more musical compression */
-  KNEE: 8,
+  KNEE: 10,
   
-  /** 2.5:1 ratio for subtle, transparent compression */
-  RATIO: 2.5,
+  /** 1.8:1 ratio for very subtle, transparent compression */
+  RATIO: 1.8,
   
-  /** 5ms attack for natural transient response */
-  ATTACK: 0.005,
+  /** 30ms attack for natural transient response (lets sound effects punch through) */
+  ATTACK: 0.03,
   
-  /** 300ms release for smooth, musical compression */
-  RELEASE: 0.3,
+  /** 150ms release for faster recovery (music bounces back quicker) */
+  RELEASE: 0.15,
 } as const;
 
 /**

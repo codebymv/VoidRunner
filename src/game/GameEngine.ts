@@ -827,19 +827,24 @@ export class GameEngine {
    * Update physics: gravity, friction, movement, trails
    */
   private updatePhysics(delta: number): void {
-    // Gravity from planets
+    // Gravity from planets (optimized with distance culling and lazy sqrt)
+    const maxGravityDistSq = 800 * 800; // Skip gravity beyond 800px (negligible effect)
+    
     this.state.planets.forEach(planet => {
       const dx = planet.x - this.state.ship.x;
       const dy = planet.y - this.state.ship.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > 0) {
-        const baseForce = planet.mass / (dist * dist);
-        // Apply enhanced gravity for blackholes
-        const gravityMultiplier = planet.gravityMultiplier || 1;
-        const force = baseForce * gravityMultiplier;
-        this.state.ship.vx += (dx / dist) * force * 0.01;
-        this.state.ship.vy += (dy / dist) * force * 0.01;
-      }
+      const distSq = dx * dx + dy * dy;
+      
+      // Skip if planet is too far (gravity negligible)
+      if (distSq > maxGravityDistSq || distSq === 0) return;
+      
+      const dist = Math.sqrt(distSq); // Only calculate sqrt when needed
+      const baseForce = planet.mass / distSq; // Use distSq directly
+      // Apply enhanced gravity for blackholes
+      const gravityMultiplier = planet.gravityMultiplier || 1;
+      const force = baseForce * gravityMultiplier;
+      this.state.ship.vx += (dx / dist) * force * 0.01;
+      this.state.ship.vy += (dy / dist) * force * 0.01;
     });
 
     // Apply friction
@@ -1004,10 +1009,10 @@ export class GameEngine {
       this.state.planets.forEach((planet) => {
         const dx = star.x - planet.x;
         const dy = star.y - planet.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const distSq = dx * dx + dy * dy;
         const collisionDist = star.radius + planet.radius;
         
-        if (dist < collisionDist) {
+        if (distSq < collisionDist * collisionDist) {
           // Different interactions based on obstacle type
           switch (planet.type) {
             case "meteor":
@@ -1447,12 +1452,13 @@ export class GameEngine {
       this.state.planets.forEach(planet => {
         if (bulletHit) return;
         
-        // Simple circle collision detection
+        // Simple circle collision detection (optimized with squared distance)
         const dx = bullet.x - planet.x;
         const dy = bullet.y - planet.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const distSq = dx * dx + dy * dy;
+        const minDist = bullet.radius + planet.radius;
         
-        if (dist < bullet.radius + planet.radius) {
+        if (distSq < minDist * minDist) {
           bulletHit = true;
           
           // Calculate damage (purple bullets do 50% more)
@@ -1507,9 +1513,10 @@ export class GameEngine {
         
         const dx = bullet.x - scrap.x;
         const dy = bullet.y - scrap.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const distSq = dx * dx + dy * dy;
+        const minDist = bullet.radius + scrap.radius;
         
-        if (dist < bullet.radius + scrap.radius) {
+        if (distSq < minDist * minDist) {
           bulletHit = true;
           const scrapIndex = this.state.scraps.indexOf(scrap);
           if (scrapIndex > -1) {
@@ -1539,9 +1546,10 @@ export class GameEngine {
       this.state.planets.forEach(planet => {
         const dx = planet.x - this.state.ship.x;
         const dy = planet.y - this.state.ship.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const distSq = dx * dx + dy * dy;
+        const minDist = planet.radius + this.state.ship.radius;
         
-        if (dist < planet.radius + this.state.ship.radius) {
+        if (distSq < minDist * minDist) {
           // Collision! Apply damage
           this.createParticles(this.state.ship.x, this.state.ship.y, "hsl(0, 100%, 50%)", 20);
           this.state.invulnerable = 120;
@@ -1558,18 +1566,20 @@ export class GameEngine {
       this.state.planets.forEach(planet => {
         const dx = planet.x - this.state.ship.x;
         const dy = planet.y - this.state.ship.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const distSq = dx * dx + dy * dy;
         
         // Calculate planet speed
         const planetSpeed = Math.sqrt(planet.vx * planet.vx + planet.vy * planet.vy);
         const highSpeedThreshold = 8;
         
-        // Near-miss range: just outside collision range
+        // Near-miss range: just outside collision range (optimized with squared distance)
         const collisionRange = planet.radius + this.state.ship.radius;
         const nearMissRange = collisionRange * 1.6;
+        const collisionRangeSq = collisionRange * collisionRange;
+        const nearMissRangeSq = nearMissRange * nearMissRange;
         
         // Award near-miss for high-speed objects (once per planet)
-        if (dist > collisionRange && dist < nearMissRange && planetSpeed > highSpeedThreshold) {
+        if (distSq > collisionRangeSq && distSq < nearMissRangeSq && planetSpeed > highSpeedThreshold) {
           if (!this.state.nearMissTracker.has(planet.id)) {
             this.state.nearMissTracker.set(planet.id, Date.now());
             
@@ -1616,10 +1626,10 @@ export class GameEngine {
       if (!star.collected) {
         const dx = star.x - this.state.ship.x;
         const dy = star.y - this.state.ship.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const distSq = dx * dx + dy * dy;
         const acquisitionRadius = 35 * this.mobileScaleFactor;
         
-        if (dist < acquisitionRadius) {
+        if (distSq < acquisitionRadius * acquisitionRadius) {
           star.collected = true;
           this.createParticles(star.x, star.y, "hsl(60, 100%, 50%)", 15);
           
@@ -1642,10 +1652,10 @@ export class GameEngine {
       if (!wrench.collected) {
         const dx = wrench.x - this.state.ship.x;
         const dy = wrench.y - this.state.ship.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const distSq = dx * dx + dy * dy;
         const acquisitionRadius = 40 * this.mobileScaleFactor;
         
-        if (dist < acquisitionRadius) {
+        if (distSq < acquisitionRadius * acquisitionRadius) {
           wrench.collected = true;
           this.callbacks.onPlaySound('healthWrench');
           
@@ -1676,9 +1686,10 @@ export class GameEngine {
       if (!powerUp.collected) {
         const dx = powerUp.x - this.state.ship.x;
         const dy = powerUp.y - this.state.ship.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const distSq = dx * dx + dy * dy;
+        const minDist = this.state.ship.radius + powerUp.radius;
         
-        if (dist < this.state.ship.radius + powerUp.radius) {
+        if (distSq < minDist * minDist) {
           powerUp.collected = true;
           
           // Activate unlimited ammo
@@ -1711,19 +1722,21 @@ export class GameEngine {
     this.state.scraps = this.state.scraps.filter(scrap => {
       const dx = scrap.x - this.state.ship.x;
       const dy = scrap.y - this.state.ship.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const distSq = dx * dx + dy * dy;
       
       const collectionRadius = (scrap.radius + this.state.ship.radius) * 1.5;
       const damageRadius = scrap.radius + this.state.ship.radius;
+      const collectionRadiusSq = collectionRadius * collectionRadius;
+      const damageRadiusSq = damageRadius * damageRadius;
       
-      if (dist < collectionRadius && dist >= damageRadius) {
+      if (distSq < collectionRadiusSq && distSq >= damageRadiusSq) {
         // Safe collection for points
         this.createParticles(scrap.x, scrap.y, "hsl(0, 0%, 100%)", 12);
         this.callbacks.onPlaySound('starAcquire');
         this.awardPoints("Scrap collected!", 25, 1500);
         return false; // Remove scrap
-      } else if (dist < damageRadius) {
-        // Collision damage
+      } else if (distSq < damageRadiusSq && this.state.invulnerable === 0) {
+        // Collision damage (only if not invulnerable)
         this.createParticles(this.state.ship.x, this.state.ship.y, "hsl(30, 80%, 60%)", 8);
         this.state.invulnerable = 60;
         this.state.shake = 8;
@@ -1894,12 +1907,13 @@ export class GameEngine {
    * Spawn a health wrench pickup
    */
   private spawnHealthWrench(): void {
-    // Spawn away from ship to avoid instant collection
+    // Spawn away from ship to avoid instant collection (optimized with squared distance)
     let x, y;
+    const minDistSq = 150 * 150;
     do {
       x = Math.random() * this.canvasWidth;
       y = Math.random() * this.canvasHeight;
-    } while (Math.sqrt((x - this.state.ship.x) ** 2 + (y - this.state.ship.y) ** 2) < 150);
+    } while ((x - this.state.ship.x) ** 2 + (y - this.state.ship.y) ** 2 < minDistSq);
 
     this.state.healthWrenches.push({
       x,
@@ -1916,12 +1930,13 @@ export class GameEngine {
    * Spawn an ammo power-up
    */
   private spawnAmmoPowerUp(): void {
-    // Spawn away from ship to avoid instant collection
+    // Spawn away from ship to avoid instant collection (optimized with squared distance)
     let x, y;
+    const minDistSq = 200 * 200;
     do {
       x = Math.random() * this.canvasWidth;
       y = Math.random() * this.canvasHeight;
-    } while (Math.sqrt((x - this.state.ship.x) ** 2 + (y - this.state.ship.y) ** 2) < 200);
+    } while ((x - this.state.ship.x) ** 2 + (y - this.state.ship.y) ** 2 < minDistSq);
 
     this.state.ammoPowerUps.push({
       x,
@@ -1956,15 +1971,22 @@ export class GameEngine {
     this.createParticles(x, y, "hsl(30, 100%, 80%)", 20);
     this.createParticles(x, y, "hsl(60, 100%, 90%)", 15);
     
-    // Apply blast force to nearby obstacles
+    // Apply blast force to nearby obstacles (optimized with early rejection)
+    const blastRadiusSq = blastRadius * blastRadius;
+    
     this.state.planets.forEach((planet, index) => {
       if (excludeIndices.includes(index)) return;
       
       const dx = planet.x - x;
       const dy = planet.y - y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const distSq = dx * dx + dy * dy;
       
-      if (dist < blastRadius && dist > 0) {
+      // Early rejection with squared distance
+      if (distSq >= blastRadiusSq || distSq === 0) return;
+      
+      const dist = Math.sqrt(distSq); // Only calculate sqrt for planets within radius
+      
+      if (true) { // Kept for structure, condition already checked above
         const normalX = dx / dist;
         const normalY = dy / dist;
         const blastForce = force * (1 - dist / blastRadius); // Force decreases with distance

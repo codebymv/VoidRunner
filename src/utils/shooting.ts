@@ -45,7 +45,7 @@ export const updateBullets = (bullets: Bullet[], delta: number): Bullet[] => {
 };
 
 /**
- * Check if bullet hits a planet/obstacle
+ * Check if bullet hits a planet/obstacle (optimized with squared distance)
  */
 export const checkBulletPlanetCollision = (
   bullet: Bullet,
@@ -53,12 +53,13 @@ export const checkBulletPlanetCollision = (
 ): boolean => {
   const dx = bullet.x - planet.x;
   const dy = bullet.y - planet.y;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  return dist < bullet.radius + planet.radius;
+  const distSq = dx * dx + dy * dy;
+  const minDist = bullet.radius + planet.radius;
+  return distSq < minDist * minDist;
 };
 
 /**
- * Check if bullet hits scrap
+ * Check if bullet hits scrap (optimized with squared distance)
  */
 export const checkBulletScrapCollision = (
   bullet: Bullet,
@@ -66,8 +67,9 @@ export const checkBulletScrapCollision = (
 ): boolean => {
   const dx = bullet.x - scrap.x;
   const dy = bullet.y - scrap.y;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  return dist < bullet.radius + scrap.radius;
+  const distSq = dx * dx + dy * dy;
+  const minDist = bullet.radius + scrap.radius;
+  return distSq < minDist * minDist;
 };
 
 /**

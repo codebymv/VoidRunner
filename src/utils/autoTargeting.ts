@@ -1,7 +1,7 @@
 import { Ship, Planet } from '@/game/types';
 
 /**
- * Find the nearest enemy to the ship for auto-targeting
+ * Find the nearest enemy to the ship for auto-targeting (optimized with squared distance)
  */
 export const findNearestEnemy = (
   ship: Ship,
@@ -9,16 +9,16 @@ export const findNearestEnemy = (
   maxRange: number = 400
 ): { planet: Planet; angle: number } | null => {
   let nearestPlanet: Planet | null = null;
-  let nearestDistance = maxRange;
+  let nearestDistanceSq = maxRange * maxRange;
   let targetAngle = 0;
 
   planets.forEach(planet => {
     const dx = planet.x - ship.x;
     const dy = planet.y - ship.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    const distanceSq = dx * dx + dy * dy;
 
-    if (distance < nearestDistance) {
-      nearestDistance = distance;
+    if (distanceSq < nearestDistanceSq) {
+      nearestDistanceSq = distanceSq;
       nearestPlanet = planet;
       targetAngle = Math.atan2(dy, dx);
     }
