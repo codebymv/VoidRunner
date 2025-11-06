@@ -345,6 +345,37 @@ export class AudioManager {
       return;
     }
 
+    // Special handling for speech sounds (different audio bus)
+    if (soundName === 'speech1' || soundName === 'speech2') {
+      const audio = this.soundEffects.get(soundName);
+      const sourceNode = this.speechSources.get(soundName); // Use speechSources
+
+      if (!audio || !sourceNode || !this.audioContext || !this.speechGain) { // Check speechGain
+        console.warn(`❌ Speech sound '${soundName}' or its source not found`);
+        return;
+      }
+
+      console.log(`✅ Found speech '${soundName}', attempting to play...`);
+
+      try {
+        // Get the individual file volume (e.g., 0.95)
+        const individualVolume = getSoundEffectVolume(soundName);
+        
+        // Speech sounds are simple: they don't need the complex GainNode.
+        audio.volume = individualVolume; 
+
+        // Reset audio to beginning and play
+        audio.currentTime = 0;
+        console.log(`🎵 Playing speech '${soundName}' at volume ${audio.volume}`);
+        audio.play().catch(error => {
+          console.error(`❌ Failed to play speech '${soundName}':`, error);
+        });
+      } catch (error) {
+        console.error(`❌ Error playing speech '${soundName}':`, error);
+      }
+      return; // IMPORTANT: Stop here so it doesn't fall through
+    }
+
 // Regular sound effect handling
 const audio = this.soundEffects.get(soundName);
 const sourceNode = this.soundEffectSources.get(soundName);
