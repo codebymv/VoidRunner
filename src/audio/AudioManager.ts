@@ -304,8 +304,8 @@ export class AudioManager {
     this.shipIdleGain!.gain.value = AMBIENT_LEVELS.SHIP_ENGINE;
     this.shipThrustGain!.gain.value = 0;
     
-    // Set initial sound effects volume to match music level
-    this.setSoundEffectsVolume(MUSIC_LEVELS.MENU);
+    // Set initial sound effects volume
+    this.setSoundEffectsVolume();
     
     console.log('Sound effects initialized and routed through audio bus');
     console.log('Ship engine loops initialized (idle/thrust crossfading system ready)');

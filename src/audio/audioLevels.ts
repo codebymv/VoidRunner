@@ -28,10 +28,10 @@ export const SOUND_EFFECT_LEVELS = {
   SHOOTING: 0.8,
   
   /** Charge empty sound - 60% (warning feedback) */
-  CHARGE_EMPTY: 0.4,
+  CHARGE_EMPTY: 0.33,
   
   /** Charge ready sound - 70% (positive feedback) */
-  CHARGE_READY: 0.2,
+  CHARGE_READY: 0.19,
   
   /** Explosion sound - 85% (impactful) */
   EXPLOSION: 0.85,
@@ -44,7 +44,7 @@ export const SOUND_EFFECT_LEVELS = {
   SHIELD_ACTIVATE: 0.40,
   
   /** Vulnerable blink sound - 40% (subtle warning) */
-  VULNERABLE_BLINK: 0.37,
+  VULNERABLE_BLINK: 0.27,
   
   // Pickups & Collectibles
   /** Star collection sounds - 50% (moderate) */
@@ -61,7 +61,7 @@ export const SOUND_EFFECT_LEVELS = {
   
   // Upgrades & Special
   /** Ship upgrades sound - 40% (celebratory) */
-  SHIP_UPGRADES: 0.3,
+  SHIP_UPGRADES: 0.17,
   
   // UI & Menu
   /** Menu open sound - 50% */
