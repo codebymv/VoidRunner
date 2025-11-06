@@ -71,6 +71,10 @@ export class AudioManager {
   private shieldSoundPool: HTMLAudioElement[] = []; // Pool of shield sounds for overlapping playback
   private shieldPoolIndex: number = 0; // Current index in the shield sound pool
   private starAcquireCounter: number = 0; // Counter for alternating star acquire sounds
+  private shoot1Pool: { audio: HTMLAudioElement, source: MediaElementAudioSourceNode, gain: GainNode }[] = [];
+  private shoot1PoolIndex: number = 0;
+  private shoot2Pool: { audio: HTMLAudioElement, source: MediaElementAudioSourceNode, gain: GainNode }[] = [];
+  private shoot2PoolIndex: number = 0;
   
   // Ship engine loops (crossfading idle/thrust states)
   private shipIdleLoop: HTMLAudioElement | null = null;
@@ -198,8 +202,6 @@ export class AudioManager {
         menuOpen: menuOpenSound,
         menuClose: menuCloseSound,
         vulnerableBlink: vulnerableBlinkSound,
-        shoot1: shoot1Sound, // Blue bullets (level 2)
-        shoot2: shoot2Sound, // Purple bullets (level 3)
         chargeEmpty: chargeEmptySound, // Ammo depleted
         chargeReady: chargeReadySound, // Ammo recharged
         unlimitedAmmo: unlimitedAmmoSound, // Unlimited ammo pickup
@@ -251,6 +253,33 @@ export class AudioManager {
       shieldSource.connect(this.soundEffectsGain!);
       
       this.shieldSoundPool.push(shieldAudio);
+    }
+    
+    // Create pools for shooting sounds (for rapid, overlapping playback)
+    const SHOOT_POOL_SIZE = 10; // A pool of 10 sounds for 10 shots/sec
+    const shoot1Volume = getSoundEffectVolume('shoot1'); // Gets 1.5
+    const shoot2Volume = getSoundEffectVolume('shoot2'); // Gets 1.5
+
+    for (let i = 0; i < SHOOT_POOL_SIZE; i++) {
+      // --- Shoot 1 Pool (Blue) ---
+      const audio1 = new Audio(shoot1Sound);
+      audio1.preload = 'auto';
+      const source1 = this.audioContext!.createMediaElementSource(audio1);
+      const gain1 = this.audioContext!.createGain();
+      gain1.gain.value = shoot1Volume; // Set the 1.5 volume
+      source1.connect(gain1);
+      gain1.connect(this.soundEffectsGain!); // Connect to main SFX bus
+      this.shoot1Pool.push({ audio: audio1, source: source1, gain: gain1 });
+
+      // --- Shoot 2 Pool (Purple) ---
+      const audio2 = new Audio(shoot2Sound);
+      audio2.preload = 'auto';
+      const source2 = this.audioContext!.createMediaElementSource(audio2);
+      const gain2 = this.audioContext!.createGain();
+      gain2.gain.value = shoot2Volume; // Set the 1.5 volume
+      source2.connect(gain2);
+      gain2.connect(this.soundEffectsGain!); // Connect to main SFX bus
+      this.shoot2Pool.push({ audio: audio2, source: source2, gain: gain2 });
     }
     
     // Initialize ship engine loops (idle and thrust)
@@ -320,6 +349,41 @@ export class AudioManager {
       }
       return;
     }
+
+    // Special handling for shooting sounds (pooled with gain)
+    if (soundName === 'shoot1' || soundName === 'shoot2') {
+      const isShoot1 = soundName === 'shoot1';
+      const pool = isShoot1 ? this.shoot1Pool : this.shoot2Pool;
+      let index = isShoot1 ? this.shoot1PoolIndex : this.shoot2PoolIndex;
+      
+      if (pool.length === 0) {
+        console.warn(`Shooting sound pool for ${soundName} not initialized`);
+        return;
+      }
+      
+      try {
+        // Get the next audio element from the pool
+        const { audio } = pool[index];
+        
+        // Update the index
+        index = (index + 1) % pool.length;
+        if (isShoot1) {
+          this.shoot1PoolIndex = index;
+        } else {
+          this.shoot2PoolIndex = index;
+        }
+        
+        // Play the sound
+        audio.currentTime = 0;
+        audio.play().catch(error => {
+          console.error(`Failed to play ${soundName} sound:`, error);
+        });
+      } catch (error) {
+        console.error(`Error playing ${soundName} sound:`, error);
+      }
+      return;
+    }
+    // --- END OF NEW BLOCK ---
 
     // Special handling for star acquire sound to alternate between two sounds
     if (soundName === 'starAcquire') {
