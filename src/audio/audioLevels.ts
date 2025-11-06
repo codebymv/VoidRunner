@@ -44,8 +44,8 @@ export const SOUND_EFFECT_LEVELS = {
  * Dialog is elevated for clarity
  */
 export const VOICE_LEVELS = {
-  /** Base speech volume - 35% of master */
-  SPEECH_BASE: 0.35,
+  /** Base speech volume - 100% of master */
+  SPEECH_BASE: 1.0,
   
   /** Individual speech file volume - 95% */
   SPEECH_FILE: 0.95,
