@@ -669,11 +669,18 @@ export class Renderer {
       ctx.translate(ship.x, ship.y);
       ctx.rotate(ship.angle + Math.PI / 2);
       
-      // Apply green health glow effect if active (check ref for immediate timing)
+      // Apply health glow effect if active (check ref for immediate timing)
+      // Color matches current health status (same as invulnerability shield)
       const now = Date.now();
       if (now < healthGlowEndTimeRef) {
         ctx.shadowBlur = 30;
-        ctx.shadowColor = "hsl(120, 100%, 50%)"; // Bright green glow
+        // Use same color logic as the invulnerability shield
+        const glowColor = shield > 0 ? '#3b82f6' :      // Blue for overshield
+                         health >= 2.5 ? '#22c55e' :    // Green (full health)
+                         health >= 1.5 ? '#eab308' :    // Yellow (medium health)
+                         health > 0 ? '#ef4444' :       // Red (low health)
+                         '#666666';                     // Gray for no health
+        ctx.shadowColor = glowColor;
       } else {
         ctx.shadowBlur = 0;
         ctx.shadowColor = "transparent";
