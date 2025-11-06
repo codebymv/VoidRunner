@@ -543,12 +543,13 @@ export class AudioManager {
     this.setSpeechVolume(volume);
   }
   
-  private setSoundEffectsVolume(volume: number): void {
-    if (this.soundEffectsGain) {
-      // Sound effects at 80%
-      this.soundEffectsGain.gain.value = Math.max(0, Math.min(1, volume * 0.8));
+    // In AudioManager.ts
+    private setSoundEffectsVolume(): void { // Remove the 'volume' parameter
+      if (this.soundEffectsGain) {
+        // Set sound effects bus to a fixed 80% (or 1.0 for 100%)
+        this.soundEffectsGain.gain.value = 0.8; 
+      }
     }
-  }
 
   private setSpeechVolume(volume: number): void {
     if (this.speechGain) {
