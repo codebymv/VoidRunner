@@ -28,10 +28,10 @@ export const SOUND_EFFECT_LEVELS = {
   SHOOTING: 0.8,
   
   /** Charge empty sound - 60% (warning feedback) */
-  CHARGE_EMPTY: 0.33,
+  CHARGE_EMPTY: 0.13,
   
   /** Charge ready sound - 70% (positive feedback) */
-  CHARGE_READY: 0.19,
+  CHARGE_READY: 0.15,
   
   /** Explosion sound - 85% (impactful) */
   EXPLOSION: 0.85,
@@ -48,7 +48,7 @@ export const SOUND_EFFECT_LEVELS = {
   
   // Pickups & Collectibles
   /** Star collection sounds - 50% (moderate) */
-  STAR_ACQUIRE: 0.50,
+  STAR_ACQUIRE: 0.40,
   
   /** Health wrench pickup - 80% */
   HEALTH_WRENCH: 0.75,
@@ -61,7 +61,7 @@ export const SOUND_EFFECT_LEVELS = {
   
   // Upgrades & Special
   /** Ship upgrades sound - 40% (celebratory) */
-  SHIP_UPGRADES: 0.17,
+  SHIP_UPGRADES: 0.12,
   
   // UI & Menu
   /** Menu open sound - 50% */
