@@ -8,11 +8,11 @@
  * Music is kept subtle to let gameplay sounds dominate
  */
 export const MUSIC_LEVELS = {
-  /** Menu music volume - 21% for subtle background atmosphere */
-  MENU: 0.21,
+  /** Menu music volume - 19% for subtle background atmosphere */
+  MENU: 0.19,
   
-  /** Gameplay music volume - 23% to stay under gameplay sounds */
-  GAMEPLAY: 0.23,
+  /** Gameplay music volume - 21% to stay under gameplay sounds */
+  GAMEPLAY: 0.21,
   
   /** Crossfade duration between tracks in seconds */
   CROSSFADE_DURATION: 3.0,
@@ -28,10 +28,10 @@ export const SOUND_EFFECT_LEVELS = {
   SHOOTING: 0.8,
   
   /** Charge empty sound - 60% (warning feedback) */
-  CHARGE_EMPTY: 0.13,
+  CHARGE_EMPTY: 0.10,
   
   /** Charge ready sound - 70% (positive feedback) */
-  CHARGE_READY: 0.15,
+  CHARGE_READY: 0.10,
   
   /** Explosion sound - 85% (impactful) */
   EXPLOSION: 0.85,
@@ -44,7 +44,7 @@ export const SOUND_EFFECT_LEVELS = {
   SHIELD_ACTIVATE: 0.40,
   
   /** Vulnerable blink sound - 40% (subtle warning) */
-  VULNERABLE_BLINK: 0.27,
+  VULNERABLE_BLINK: 0.20,
   
   // Pickups & Collectibles
   /** Star collection sounds - 50% (moderate) */
@@ -61,7 +61,7 @@ export const SOUND_EFFECT_LEVELS = {
   
   // Upgrades & Special
   /** Ship upgrades sound - 40% (celebratory) */
-  SHIP_UPGRADES: 0.12,
+  SHIP_UPGRADES: 0.08,
   
   // UI & Menu
   /** Menu open sound - 50% */
@@ -71,7 +71,7 @@ export const SOUND_EFFECT_LEVELS = {
   MENU_CLOSE: 0.45,
   
   /** Game over sound - 50% (moderate) */
-  GAME_OVER: 0.65,
+  GAME_OVER: 0.50,
   
   /** Default sound effect volume - 110% */
   DEFAULT: 1.1,

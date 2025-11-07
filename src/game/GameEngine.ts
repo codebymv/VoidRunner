@@ -1661,7 +1661,7 @@ export class GameEngine {
           
           // Show pickup notification
           this.callbacks.onShowPickupNotification(
-            "🔧 Repairs +150 pts",
+            "Repairs! +150 pts",
             'bg-gradient-to-r from-green-400 to-emerald-500 text-slate-900 font-bold shadow-lg'
           );
           
