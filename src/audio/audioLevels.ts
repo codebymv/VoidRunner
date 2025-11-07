@@ -70,7 +70,7 @@ export const SOUND_EFFECT_LEVELS = {
   
   // Upgrades & Special
   /** Ship upgrades sound - 40% (celebratory) */
-  SHIP_UPGRADES: 0.4,
+  SHIP_UPGRADES: 0.2,
   
   // UI & Menu
   /** Menu open sound - 50% */
