@@ -140,7 +140,7 @@ export interface GameEngineCallbacks {
   onUnlimitedAmmoChange: (isUnlimited: boolean, endTime: number) => void;
   onShowToast: (message: string, points: number, options?: any) => void;
   onShowPickupNotification: (message: string, className: string) => void;
-  onPlaySound: (soundName: string) => void;
+  onPlaySound: (soundName: string, volumeMultiplier?: number) => void;
   onHealthGlow: (duration: number) => void;
   onCreateParticles: (x: number, y: number, color: string, count: number) => void;
   onCreateExplosion: (x: number, y: number, blastRadius: number, force: number, excludeIndices: number[]) => void;

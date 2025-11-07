@@ -62,6 +62,22 @@ export class GameEngine {
   // Spatial grid for optimized collision detection
   private spatialGrid: SpatialGrid;
   
+  // Sound rate limiting (prevents audio overload in late game)
+  private lastBlackholeAbsorbSound: number = 0;
+  private BLACKHOLE_SOUND_COOLDOWN: number = 400; // 400ms between sounds
+  
+  private lastDebrisBounceSound: number = 0;
+  private DEBRIS_BOUNCE_COOLDOWN: number = 300; // 300ms between sounds
+  
+  private lastMeteorCollisionSound: number = 0;
+  private METEOR_COLLISION_COOLDOWN: number = 300; // 300ms between sounds
+  
+  private lastExplosionSound: number = 0;
+  private EXPLOSION_COOLDOWN: number = 200; // 200ms between sounds
+  
+  private lastStarAcquireSound: number = 0;
+  private STAR_ACQUIRE_COOLDOWN: number = 100; // 100ms between sounds (frequent pickup)
+  
   // Configuration
   private canvasWidth: number;
   private canvasHeight: number;
@@ -463,6 +479,14 @@ export class GameEngine {
                 blackhole.color = "hsl(290, 100%, 18%)";
               }
               
+              // Play blackhole absorption sound (with rate limiting and random volume)
+              const now = Date.now();
+              if (now - this.lastBlackholeAbsorbSound > this.BLACKHOLE_SOUND_COOLDOWN) {
+                const randomVolume = 0.5 + Math.random() * 0.7; // 0.5 to 1.2
+                this.callbacks.onPlaySound('blackholeAbsorb', randomVolume);
+                this.lastBlackholeAbsorbSound = now;
+              }
+              
               // Trigger callbacks
               this.callbacks.onShowToast("Debris destroyed! +75 points", 75, { 
                 duration: 1500,
@@ -522,6 +546,14 @@ export class GameEngine {
               blackhole.color = "hsl(290, 100%, 18%)";
             }
             
+            // Play blackhole absorption sound (with rate limiting and random volume)
+            const now = Date.now();
+            if (now - this.lastBlackholeAbsorbSound > this.BLACKHOLE_SOUND_COOLDOWN) {
+              const randomVolume = 0.5 + Math.random() * 0.7; // 0.5 to 1.2
+              this.callbacks.onPlaySound('blackholeAbsorb', randomVolume);
+              this.lastBlackholeAbsorbSound = now;
+            }
+            
             // Create dramatic absorption effect
             this.callbacks.onCreateParticles(meteor.x, meteor.y, "hsl(0, 100%, 70%)", 15);
             this.callbacks.onCreateParticles(blackhole.x, blackhole.y, "hsl(270, 100%, 50%)", 10);
@@ -539,6 +571,13 @@ export class GameEngine {
             const blastRadius = 80 + Math.random() * 40;
             const blastForce = 3 + Math.random() * 2;
             
+            // Play meteor collision sound (with rate limiting)
+            const now = Date.now();
+            if (now - this.lastMeteorCollisionSound > this.METEOR_COLLISION_COOLDOWN) {
+              this.callbacks.onPlaySound('meteorCollision');
+              this.lastMeteorCollisionSound = now;
+            }
+            
             // Create massive explosion
             this.callbacks.onCreateExplosion(explosionX, explosionY, blastRadius, blastForce, [index1, index2]);
             
@@ -554,6 +593,13 @@ export class GameEngine {
             const explosionY = (planet1.y + planet2.y) / 2;
             const blastRadius = 60 + Math.random() * 30;
             const blastForce = 2 + Math.random() * 1.5;
+            
+            // Play explosion sound (with rate limiting)
+            const now = Date.now();
+            if (now - this.lastExplosionSound > this.EXPLOSION_COOLDOWN) {
+              this.callbacks.onPlaySound('explosion');
+              this.lastExplosionSound = now;
+            }
             
             // Create explosion with blue-white colors
             this.callbacks.onCreateParticles(explosionX, explosionY, "hsl(200, 100%, 80%)", 20);
@@ -591,6 +637,13 @@ export class GameEngine {
             const planet = planet1.type === "planet2" ? planet1 : planet2;
             const meteorIndex = planet1.type === "meteor" ? index1 : index2;
             const planetIndex = planet1.type === "planet2" ? index1 : index2;
+            
+            // Play meteor collision sound (with rate limiting)
+            const now = Date.now();
+            if (now - this.lastMeteorCollisionSound > this.METEOR_COLLISION_COOLDOWN) {
+              this.callbacks.onPlaySound('meteorCollision');
+              this.lastMeteorCollisionSound = now;
+            }
             
             // Planet explodes
             const blastRadius = 80 + Math.random() * 40;
@@ -665,6 +718,14 @@ export class GameEngine {
               const megaBlastRadius = 200 + Math.random() * 100;
               const megaBlastForce = 8 + Math.random() * 4;
               
+              // Play blackhole absorption sound (with rate limiting and random volume)
+              const now = Date.now();
+              if (now - this.lastBlackholeAbsorbSound > this.BLACKHOLE_SOUND_COOLDOWN) {
+                const randomVolume = 0.5 + Math.random() * 0.7; // 0.5 to 1.2
+                this.callbacks.onPlaySound('blackholeAbsorb', randomVolume);
+                this.lastBlackholeAbsorbSound = now;
+              }
+              
               // Create massive explosion effect
               this.callbacks.onCreateParticles(explosionX, explosionY, "hsl(280, 100%, 90%)", 60);
               this.callbacks.onCreateParticles(explosionX, explosionY, "hsl(300, 100%, 95%)", 50);
@@ -678,6 +739,14 @@ export class GameEngine {
               // Create enhanced black hole with progressive growth
               const blastRadius = 120 + Math.random() * 40;
               const blastForce = 4 + Math.random() * 2;
+              
+              // Play blackhole absorption sound (with rate limiting and random volume)
+              const now = Date.now();
+              if (now - this.lastBlackholeAbsorbSound > this.BLACKHOLE_SOUND_COOLDOWN) {
+                const randomVolume = 0.5 + Math.random() * 0.7; // 0.5 to 1.2
+                this.callbacks.onPlaySound('blackholeAbsorb', randomVolume);
+                this.lastBlackholeAbsorbSound = now;
+              }
               
               // Create gravitational wave effect
               this.callbacks.onCreateParticles(explosionX, explosionY, "hsl(280, 100%, 80%)", 35);
@@ -1013,6 +1082,9 @@ export class GameEngine {
         const collisionDist = star.radius + planet.radius;
         
         if (distSq < collisionDist * collisionDist) {
+          // Get current time once for rate limiting
+          const now = Date.now();
+          
           // Different interactions based on obstacle type
           switch (planet.type) {
             case "meteor":
@@ -1022,7 +1094,12 @@ export class GameEngine {
               star.collected = true;
               
               this.awardPoints("Star destroyed by meteor!", 40, 1500);
-              this.callbacks.onPlaySound('starAcquire');
+              
+              // Play star acquire sound (with rate limiting)
+              if (now - this.lastStarAcquireSound > this.STAR_ACQUIRE_COOLDOWN) {
+                this.callbacks.onPlaySound('starAcquire');
+                this.lastStarAcquireSound = now;
+              }
               break;
               
             case "planet2":
@@ -1033,7 +1110,12 @@ export class GameEngine {
               star.collected = true;
               
               this.awardPoints("Star absorbed by planet!", 30, 1500);
-              this.callbacks.onPlaySound('starAcquire');
+              
+              // Play star acquire sound (with rate limiting)
+              if (now - this.lastStarAcquireSound > this.STAR_ACQUIRE_COOLDOWN) {
+                this.callbacks.onPlaySound('starAcquire');
+                this.lastStarAcquireSound = now;
+              }
               break;
               
             case "blackhole":
@@ -1043,7 +1125,12 @@ export class GameEngine {
               star.collected = true;
               
               this.awardPoints("Star consumed by black hole!", 60, 1500);
-              this.callbacks.onPlaySound('starAcquire');
+              
+              // Play star acquire sound (with rate limiting)
+              if (now - this.lastStarAcquireSound > this.STAR_ACQUIRE_COOLDOWN) {
+                this.callbacks.onPlaySound('starAcquire');
+                this.lastStarAcquireSound = now;
+              }
               break;
               
             case "debris":
@@ -1053,7 +1140,12 @@ export class GameEngine {
               star.collected = true;
               
               this.awardPoints("Star sparkle with debris!", 20, 1500);
-              this.callbacks.onPlaySound('starAcquire');
+              
+              // Play star acquire sound (with rate limiting)
+              if (now - this.lastStarAcquireSound > this.STAR_ACQUIRE_COOLDOWN) {
+                this.callbacks.onPlaySound('starAcquire');
+                this.lastStarAcquireSound = now;
+              }
               break;
           }
         }
@@ -1114,6 +1206,12 @@ export class GameEngine {
               
               debris.bounceCount++;
               
+            // Play debris bounce sound (with rate limiting)
+            const now = Date.now();
+            if (now - this.lastDebrisBounceSound > this.DEBRIS_BOUNCE_COOLDOWN) {
+              this.callbacks.onPlaySound('debrisBounce');
+              this.lastDebrisBounceSound = now;
+            }
             this.awardPoints("Debris collision!", 20, 1000);
             this.createParticles(debris.x, debris.y, "hsl(30, 70%, 60%)", 8);
             }
@@ -1161,6 +1259,14 @@ export class GameEngine {
             this.createParticles(blackhole.x, blackhole.y, "hsl(270, 100%, 50%)", 10);
             this.createParticles(blackhole.x, blackhole.y, "hsl(280, 100%, 60%)", 8);
             
+            // Play blackhole absorption sound (with rate limiting and random volume)
+            const now = Date.now();
+            if (now - this.lastBlackholeAbsorbSound > this.BLACKHOLE_SOUND_COOLDOWN) {
+              const randomVolume = 0.5 + Math.random() * 0.7; // 0.5 to 1.2
+              this.callbacks.onPlaySound('blackholeAbsorb', randomVolume);
+              this.lastBlackholeAbsorbSound = now;
+            }
+            
             this.state.planets.splice(meteorIndex, 1);
             return;
           }
@@ -1180,6 +1286,12 @@ export class GameEngine {
               debris.vy = -debris.vy * 0.9 + normalY * 2;
               debris.bounceCount++;
               
+            // Play debris bounce sound (with rate limiting)
+            const now = Date.now();
+            if (now - this.lastDebrisBounceSound > this.DEBRIS_BOUNCE_COOLDOWN) {
+              this.callbacks.onPlaySound('debrisBounce');
+              this.lastDebrisBounceSound = now;
+            }
             this.awardPoints("Debris bounce!", 15, 1000);
             this.createParticles(debris.x, debris.y, "hsl(30, 70%, 60%)", 6);
             }
@@ -1211,6 +1323,15 @@ export class GameEngine {
               this.createParticles(debris.x, debris.y, "hsl(30, 70%, 60%)", 12);
               this.createParticles(blackhole.x, blackhole.y, "hsl(270, 100%, 50%)", 8);
               this.createParticles(blackhole.x, blackhole.y, "hsl(280, 100%, 60%)", 5);
+              
+              // Play blackhole absorption sound (with rate limiting and random volume)
+              const now = Date.now();
+              if (now - this.lastBlackholeAbsorbSound > this.BLACKHOLE_SOUND_COOLDOWN) {
+                const randomVolume = 0.5 + Math.random() * 0.7; // 0.5 to 1.2
+                this.callbacks.onPlaySound('blackholeAbsorb', randomVolume);
+                this.lastBlackholeAbsorbSound = now;
+              }
+              
               this.state.planets.splice(debrisIndex, 1);
             } else if (debris.canBounce) {
               // Debris bounces
@@ -1220,6 +1341,12 @@ export class GameEngine {
               debris.vy += normalY * 3;
               debris.bounceCount++;
               
+              // Play debris bounce sound (with rate limiting)
+              const now = Date.now();
+              if (now - this.lastDebrisBounceSound > this.DEBRIS_BOUNCE_COOLDOWN) {
+                this.callbacks.onPlaySound('debrisBounce');
+                this.lastDebrisBounceSound = now;
+              }
               this.awardPoints("Debris bounce!", 15, 1000);
               this.createParticles(debris.x, debris.y, "hsl(30, 70%, 60%)", 4);
             }
@@ -1234,6 +1361,13 @@ export class GameEngine {
             const blastForce = 3 + Math.random() * 2;
             
             this.createExplosion(explosionX, explosionY, blastRadius, blastForce, [index1, index2]);
+            
+            // Play meteor collision sound (with rate limiting)
+            const now = Date.now();
+            if (now - this.lastMeteorCollisionSound > this.METEOR_COLLISION_COOLDOWN) {
+              this.callbacks.onPlaySound('meteorCollision');
+              this.lastMeteorCollisionSound = now;
+            }
             
             // Remove both meteors
             const indicesToRemove = [index1, index2].sort((a, b) => b - a);
@@ -1304,6 +1438,13 @@ export class GameEngine {
             meteor.vy = deflectY * deflectionStrength;
             
             this.createParticles(meteor.x, meteor.y, "hsl(0, 100%, 70%)", 8);
+            
+            // Play meteor collision sound (with rate limiting)
+            const now = Date.now();
+            if (now - this.lastMeteorCollisionSound > this.METEOR_COLLISION_COOLDOWN) {
+              this.callbacks.onPlaySound('meteorCollision');
+              this.lastMeteorCollisionSound = now;
+            }
             
             this.awardPoints("Meteor collision!", 100, 2000);
             this.state.planets.splice(planetIndex, 1);
@@ -1500,7 +1641,14 @@ export class GameEngine {
               
               this.awardPoints(`Destroyed ${planet.type}!`, points, 1500);
               this.createParticles(planet.x, planet.y, planet.color, 30);
-              this.callbacks.onPlaySound('explosion');
+              
+              // Play explosion sound (with rate limiting)
+              const now = Date.now();
+              if (now - this.lastExplosionSound > this.EXPLOSION_COOLDOWN) {
+                this.callbacks.onPlaySound('explosion');
+                this.lastExplosionSound = now;
+              }
+              
               this.state.planets.splice(planetIndex, 1);
             }
           }
@@ -1609,7 +1757,14 @@ export class GameEngine {
             // Create dramatic particles and award points
             this.createParticles(this.state.ship.x, this.state.ship.y, "hsl(45, 100%, 60%)", 15);
             this.createParticles(planet.x, planet.y, "hsl(200, 100%, 70%)", 8);
-            this.callbacks.onPlaySound('starAcquire');
+            
+            // Play star acquire sound (with rate limiting)
+            const now = Date.now();
+            if (now - this.lastStarAcquireSound > this.STAR_ACQUIRE_COOLDOWN) {
+              this.callbacks.onPlaySound('starAcquire');
+              this.lastStarAcquireSound = now;
+            }
+            
             this.awardPoints(`High-speed near miss!`, nearMissPoints, 2000);
           }
         }
@@ -1639,7 +1794,13 @@ export class GameEngine {
 
           // Award points and play sound
           this.awardPoints(`Lvl ${starLevel} Star Collected!`, starValue, 1500);
-          this.callbacks.onPlaySound('starAcquire');
+          
+          // Play star acquire sound (with rate limiting)
+          const now = Date.now();
+          if (now - this.lastStarAcquireSound > this.STAR_ACQUIRE_COOLDOWN) {
+            this.callbacks.onPlaySound('starAcquire');
+            this.lastStarAcquireSound = now;
+          }
         }
       }
     });
@@ -1703,7 +1864,7 @@ export class GameEngine {
           
           // Show pickup notification
             this.callbacks.onShowPickupNotification(
-              "Unlimited Ammo! +500 pts",
+              "∞ Unlimited Ammo! +500 pts",
               'bg-gradient-to-r from-gray-300 to-slate-400 text-slate-900 font-bold shadow-lg'
             );
             
@@ -1732,7 +1893,14 @@ export class GameEngine {
       if (distSq < collectionRadiusSq && distSq >= damageRadiusSq) {
         // Safe collection for points
         this.createParticles(scrap.x, scrap.y, "hsl(0, 0%, 100%)", 12);
-        this.callbacks.onPlaySound('starAcquire');
+        
+        // Play star acquire sound (with rate limiting)
+        const now = Date.now();
+        if (now - this.lastStarAcquireSound > this.STAR_ACQUIRE_COOLDOWN) {
+          this.callbacks.onPlaySound('starAcquire');
+          this.lastStarAcquireSound = now;
+        }
+        
         this.awardPoints("Scrap collected!", 25, 1500);
         return false; // Remove scrap
       } else if (distSq < damageRadiusSq && this.state.invulnerable === 0) {

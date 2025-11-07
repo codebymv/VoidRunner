@@ -21,6 +21,9 @@ import chargeReadySound from '../assets/charge_ready.mp3';
 import unlimitedAmmoSound from '../assets/unlimited_ammo.mp3';
 import voidWipeSound from '../assets/void_wipe.mp3';
 import explosionSound from '../assets/explosion.mp3';
+import blackholeAbsorbSound from '../assets/blackhole-absorb.mp3';
+import meteorCollisionSound from '../assets/meteor_collision.mp3';
+import debrisBounceSound from '../assets/debris_bounce.mp3';
 import shipIdleLoopSound from '../assets/ship_idle_loop.mp3';
 import shipThrustLoopSound from '../assets/ship_thrust_loop.mp3';
 
@@ -68,7 +71,7 @@ export class AudioManager {
   private soundEffects: Map<string, HTMLAudioElement> = new Map();
   private soundEffectSources: Map<string, MediaElementAudioSourceNode> = new Map(); // Web Audio API sources
   private speechSources: Map<string, MediaElementAudioSourceNode> = new Map(); // Dedicated speech sources
-  private shieldSoundPool: HTMLAudioElement[] = []; // Pool of shield sounds for overlapping playback
+  private shieldSoundPool: { audio: HTMLAudioElement, source: MediaElementAudioSourceNode, gain: GainNode }[] = []; // Pool of shield sounds for overlapping playback
   private shieldPoolIndex: number = 0; // Current index in the shield sound pool
   private starAcquireCounter: number = 0; // Counter for alternating star acquire sounds
   private shoot1Pool: { audio: HTMLAudioElement, source: MediaElementAudioSourceNode, gain: GainNode }[] = [];
@@ -206,7 +209,10 @@ export class AudioManager {
         chargeReady: chargeReadySound, // Ammo recharged
         unlimitedAmmo: unlimitedAmmoSound, // Unlimited ammo pickup
         voidWipe: voidWipeSound, // Void wipe power-up (clears all obstacles)
-        explosion: explosionSound // Obstacle destruction
+        explosion: explosionSound, // Obstacle destruction
+        blackholeAbsorb: blackholeAbsorbSound, // Blackhole absorbing objects
+        meteorCollision: meteorCollisionSound, // Meteor collisions
+        debrisBounce: debrisBounceSound // Debris bouncing off obstacles
       };
 
     // Speech sounds - routed through dedicated speech channel
@@ -243,16 +249,19 @@ export class AudioManager {
 
     // Create a pool of shield sound instances for overlapping playback
     const SHIELD_POOL_SIZE = 5;
+    const shieldVolume = getSoundEffectVolume('shieldActivate');
     for (let i = 0; i < SHIELD_POOL_SIZE; i++) {
       const shieldAudio = new Audio(shieldActivateSound);
       shieldAudio.preload = 'auto';
-      shieldAudio.volume = 1.0;
       
-      // Connect to sound effects bus
+      // Connect to sound effects bus with GainNode for proper volume control
       const shieldSource = this.audioContext!.createMediaElementSource(shieldAudio);
-      shieldSource.connect(this.soundEffectsGain!);
+      const shieldGain = this.audioContext!.createGain();
+      shieldGain.gain.value = shieldVolume;
+      shieldSource.connect(shieldGain);
+      shieldGain.connect(this.soundEffectsGain!);
       
-      this.shieldSoundPool.push(shieldAudio);
+      this.shieldSoundPool.push({ audio: shieldAudio, source: shieldSource, gain: shieldGain });
     }
     
     // Create pools for shooting sounds (for rapid, overlapping playback)
@@ -311,8 +320,8 @@ export class AudioManager {
     console.log('Ship engine loops initialized (idle/thrust crossfading system ready)');
   }
   
-  public async playSound(soundName: string): Promise<void> {
-    console.log(`🔊 Attempting to play sound: ${soundName}`);
+  public async playSound(soundName: string, volumeMultiplier: number = 1.0): Promise<void> {
+    console.log(`🔊 Attempting to play sound: ${soundName} (volume multiplier: ${volumeMultiplier.toFixed(2)})`);
     
     // Initialize audio on first call (after user gesture)
     if (!this.isAudioInitialized) {
@@ -334,16 +343,18 @@ export class AudioManager {
       }
       
       try {
-        const shieldAudio = this.shieldSoundPool[this.shieldPoolIndex];
+        const { audio, gain } = this.shieldSoundPool[this.shieldPoolIndex];
         this.shieldPoolIndex = (this.shieldPoolIndex + 1) % this.shieldSoundPool.length;
         
-      // Set the correct volume
-      shieldAudio.volume = getSoundEffectVolume('shieldActivate'); // This is 0.40
-      // Reset audio to beginning and play
-      shieldAudio.currentTime = 0;
-      shieldAudio.play().catch(error => {
-        console.error(`Failed to play shield sound:`, error);
-      });
+        // Apply volume multiplier to the gain node
+        const baseVolume = getSoundEffectVolume('shieldActivate');
+        gain.gain.value = baseVolume * volumeMultiplier;
+        
+        // Reset audio to beginning and play
+        audio.currentTime = 0;
+        audio.play().catch(error => {
+          console.error(`Failed to play shield sound:`, error);
+        });
       } catch (error) {
         console.error(`Error playing shield sound:`, error);
       }
@@ -362,8 +373,12 @@ export class AudioManager {
       }
       
       try {
-        // Get the next audio element from the pool
-        const { audio } = pool[index];
+        // Get the next audio element and gain node from the pool
+        const { audio, gain } = pool[index];
+        
+        // Apply volume multiplier to the gain node
+        const baseVolume = getSoundEffectVolume(soundName);
+        gain.gain.value = baseVolume * volumeMultiplier;
         
         // Update the index
         index = (index + 1) % pool.length;
@@ -397,7 +412,7 @@ export class AudioManager {
       }
       
       try {
-        audio.volume = getSoundEffectVolume('starAcquire');
+        audio.volume = getSoundEffectVolume('starAcquire') * volumeMultiplier;
         audio.currentTime = 0;
         console.log(`🎵 Playing alternating star acquire sound: ${actualSoundName}`);
         audio.play().catch(error => {
@@ -421,12 +436,12 @@ export class AudioManager {
 
       console.log(`✅ Found speech '${soundName}', attempting to play...`);
 
-      try {
-        // Get the individual file volume (e.g., 0.95)
-        const individualVolume = getSoundEffectVolume(soundName);
+      try {
+        // Get the individual file volume (e.g., 0.95)
+        const individualVolume = getSoundEffectVolume(soundName);
         
         // Speech sounds are simple: they don't need the complex GainNode.
-        audio.volume = individualVolume; 
+        audio.volume = individualVolume * volumeMultiplier; 
 
         // Reset audio to beginning and play
         audio.currentTime = 0;
@@ -459,7 +474,7 @@ try {
   // --- NEW VOLUME LOGIC ---
   // Create a new, temporary GainNode for this specific sound
   const soundGain = this.audioContext.createGain();
-  soundGain.gain.value = individualVolume;
+  soundGain.gain.value = individualVolume * volumeMultiplier;
 
   // Connect the shared source to our new gain, and our new gain to the main SFX bus
   // sourceNode -> soundGain (1.5) -> soundEffectsGain (0.8) -> master
@@ -917,7 +932,7 @@ private setSpeechVolume(): void { // <-- REMOVE (volume: number)
     this.soundEffects.clear();
     
     // Clean up shield sound pool
-    this.shieldSoundPool.forEach(audio => {
+    this.shieldSoundPool.forEach(({ audio }) => {
       audio.pause();
       audio.currentTime = 0;
     });

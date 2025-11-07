@@ -19,6 +19,7 @@ interface GameHUDProps {
   isRecharging: boolean;
   currentDifficulty: string;
   showHelp: boolean;
+  helpFilter: string | null;
   showJoystick: boolean;
   isMobile: boolean;
   isMuted: boolean;
@@ -42,6 +43,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   isRecharging,
   currentDifficulty,
   showHelp,
+  helpFilter,
   showJoystick,
   isMobile,
   isMuted,
@@ -110,7 +112,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                     <div className="help-popup absolute top-full right-0 mt-2 bg-card/95 backdrop-blur-xl border border-primary/30 rounded-lg shadow-2xl z-[80] max-w-[280px]">
                       <div className="absolute -top-2 right-2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-card/95"></div>
                       <div className="p-3">
-                        <ControlsCard isMobile={isMobile} />
+                        <ControlsCard isMobile={isMobile} filter={helpFilter} />
                       </div>
                     </div>
                   )}
@@ -372,7 +374,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         <div className="help-popup fixed bottom-14 right-1 bg-card/95 backdrop-blur-xl border border-primary/30 rounded-lg shadow-2xl z-[80] max-w-sm">
           <div className="absolute -bottom-2 right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-card/95"></div>
           <div className="p-3">
-            <ControlsCard isMobile={isMobile} />
+            <ControlsCard isMobile={isMobile} filter={helpFilter} />
           </div>
         </div>
       )}

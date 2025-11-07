@@ -8,11 +8,11 @@
  * Music is kept subtle to let gameplay sounds dominate
  */
 export const MUSIC_LEVELS = {
-  /** Menu music volume - 19% for subtle background atmosphere */
-  MENU: 0.19,
+  /** Menu music volume - 9% for subtle background atmosphere */
+  MENU: 0.06,
   
-  /** Gameplay music volume - 21% to stay under gameplay sounds */
-  GAMEPLAY: 0.21,
+  /** Gameplay music volume - 15% to stay under gameplay sounds */
+  GAMEPLAY: 0.09,
   
   /** Crossfade duration between tracks in seconds */
   CROSSFADE_DURATION: 3.0,
@@ -28,40 +28,49 @@ export const SOUND_EFFECT_LEVELS = {
   SHOOTING: 0.8,
   
   /** Charge empty sound - 60% (warning feedback) */
-  CHARGE_EMPTY: 0.10,
+  CHARGE_EMPTY: 0.12,
   
   /** Charge ready sound - 70% (positive feedback) */
-  CHARGE_READY: 0.10,
+  CHARGE_READY: 0.15,
   
   /** Explosion sound - 85% (impactful) */
-  EXPLOSION: 0.85,
+  EXPLOSION: 0.04,
+  
+  /** Blackhole absorption sound - 39% (atmospheric) */
+  BLACKHOLE_ABSORB: 0.002,
+  
+  /** Meteor collision sound - 41% (impactful) */
+  METEOR_COLLISION: 0.03,
+  
+  /** Debris bounce sound - 36% (moderate feedback) */
+  DEBRIS_BOUNCE: 0.01,
   
   // Ship & Damage
   /** Ship hit sound - 80% (impactful feedback) */
-  SHIP_HIT: 0.8,
+  SHIP_HIT: 0.19,
   
   /** Shield activation sound - 40% (subtle) */
-  SHIELD_ACTIVATE: 0.40,
+  SHIELD_ACTIVATE: 0.32,
   
   /** Vulnerable blink sound - 40% (subtle warning) */
-  VULNERABLE_BLINK: 0.20,
+  VULNERABLE_BLINK: 0.09,
   
   // Pickups & Collectibles
   /** Star collection sounds - 50% (moderate) */
-  STAR_ACQUIRE: 0.40,
+  STAR_ACQUIRE: 0.35,
   
   /** Health wrench pickup - 80% */
-  HEALTH_WRENCH: 0.75,
+  HEALTH_WRENCH: 0.65,
   
   /** Unlimited ammo pickup - 60% */
-  UNLIMITED_AMMO: 0.75,
+  UNLIMITED_AMMO: 0.65,
   
   /** Void wipe pickup - 80% */
-  VOID_WIPE: 0.8,
+  VOID_WIPE: 0.5,
   
   // Upgrades & Special
   /** Ship upgrades sound - 40% (celebratory) */
-  SHIP_UPGRADES: 0.08,
+  SHIP_UPGRADES: 0.4,
   
   // UI & Menu
   /** Menu open sound - 50% */
@@ -71,10 +80,10 @@ export const SOUND_EFFECT_LEVELS = {
   MENU_CLOSE: 0.45,
   
   /** Game over sound - 50% (moderate) */
-  GAME_OVER: 0.50,
+  GAME_OVER: 0.26,
   
   /** Default sound effect volume - 110% */
-  DEFAULT: 1.1,
+  DEFAULT: 0.7,
 } as const;
 
 /**
@@ -86,7 +95,7 @@ export const VOICE_LEVELS = {
   SPEECH_BASE: 1.0,
   
   /** Individual speech file volume - 95% */
-  SPEECH_FILE: 1.0,
+  SPEECH_FILE: 0.96,
 } as const;
 
 /**
@@ -95,7 +104,7 @@ export const VOICE_LEVELS = {
  */
 export const AMBIENT_LEVELS = {
   /** Ship engine background ambience - 22% */
-  SHIP_ENGINE: 0.62,
+  SHIP_ENGINE: 0.18,
 } as const;
 
 /**
@@ -107,6 +116,9 @@ export function getSoundEffectVolume(soundName: string): number {
   if (soundName === 'chargeEmpty') return SOUND_EFFECT_LEVELS.CHARGE_EMPTY;
   if (soundName === 'chargeReady') return SOUND_EFFECT_LEVELS.CHARGE_READY;
   if (soundName === 'explosion') return SOUND_EFFECT_LEVELS.EXPLOSION;
+  if (soundName === 'blackholeAbsorb') return SOUND_EFFECT_LEVELS.BLACKHOLE_ABSORB;
+  if (soundName === 'meteorCollision') return SOUND_EFFECT_LEVELS.METEOR_COLLISION;
+  if (soundName === 'debrisBounce') return SOUND_EFFECT_LEVELS.DEBRIS_BOUNCE;
   
   // Ship & Damage
   if (soundName === 'shipHit') return SOUND_EFFECT_LEVELS.SHIP_HIT;

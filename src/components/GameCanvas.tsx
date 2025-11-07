@@ -175,6 +175,7 @@ export const GameCanvas = () => {
   const [hasUpgraded, setHasUpgraded] = useState(false); // Track if ship has been upgraded to ship2
   const [hasUpgradedToShip3, setHasUpgradedToShip3] = useState(false); // Track if ship has been upgraded to ship3
   const [showHelp, setShowHelp] = useState(false); // State for help popup
+  const [helpFilter, setHelpFilter] = useState<string | null>(null); // Filter help to show only specific line
   
   // Shooting system state
   const [ammo, setAmmo] = useState(100);
@@ -755,9 +756,9 @@ export const GameCanvas = () => {
           onShowPickupNotification: (message: string, className: string) => {
             showPickupNotification(message, className);
           },
-          onPlaySound: (soundName: string) => {
-            // Play the sound requested by the game engine
-            playSound(soundName).catch(console.error);
+          onPlaySound: (soundName: string, volumeMultiplier?: number) => {
+            // Play the sound requested by the game engine with optional volume multiplier
+            playSound(soundName, volumeMultiplier).catch(console.error);
           },
           onHealthGlow: (duration: number) => {
             healthGlowEndTimeRef.current = Date.now() + duration;
@@ -1314,6 +1315,15 @@ export const GameCanvas = () => {
         game.planets = engineState.planets;
       }
 
+      // === TESTING: Delegate obstacle collisions to GameEngine (all collision types) ===
+      if (engineRef.current) {
+        engineRef.current.setPlanets(game.planets);
+        engineRef.current.checkObstacleCollisions();
+        // Note: checkStarObstacleCollisions() is called internally by GameEngine.update()
+        const engineState = engineRef.current.getState();
+        game.planets = engineState.planets;
+      }
+
       // Check for oversized black holes that should disappear
       game.planets = game.planets.filter(planet => {
         if (planet.type === "blackhole") {
@@ -1403,36 +1413,22 @@ export const GameCanvas = () => {
                scrap.y > -50 && scrap.y < canvas.height + 50;
       });
 
-      // Debris collision detection - NOW HANDLED BY GameEngine (Phase 1)
-
-      // Advanced obstacle collision interactions
+      // Planet2-Blackhole orbital interactions (the only collision still handled in GameCanvas)
+      // All other obstacle collisions are now handled by GameEngine
       game.planets.forEach((planet1, index1) => {
         game.planets.forEach((planet2, index2) => {
           if (index1 >= index2) return; // Avoid duplicate checks and self-collision
           
-          const dx = planet1.x - planet2.x;
-          const dy = planet1.y - planet2.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          const minDist = planet1.radius + planet2.radius;
-          
-          if (dist < minDist && dist > 0) {
-            // Meteor-Blackhole absorption - NOW HANDLED BY GameEngine (Phase 4)
+          // Planet2-Blackhole interactions: planet2 gets orbital effect
+          if ((planet1.type === "planet2" && planet2.type === "blackhole") || 
+              (planet1.type === "blackhole" && planet2.type === "planet2")) {
             
-            // Planet2-Debris interactions - NOW HANDLED BY GameEngine (Phase 2)
+            const dx = planet1.x - planet2.x;
+            const dy = planet1.y - planet2.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const minDist = planet1.radius + planet2.radius;
             
-            // Blackhole-Debris interactions - NOW HANDLED BY GameEngine (Phases 3-4)
-            
-            // Explosion Mechanics - NOW HANDLED BY GameEngine (Phase 5)
-            // - Meteor-Meteor collisions
-            // - Planet2-Planet2 collisions
-            // - Debris-Debris collisions
-            // - Meteor-Planet2 collisions
-            
-            // Blackhole-Blackhole collisions - NOW HANDLED BY GameEngine (Phase 6)
-            
-            // Planet2-Blackhole interactions: planet2 gets orbital effect
-            if ((planet1.type === "planet2" && planet2.type === "blackhole") || 
-                (planet1.type === "blackhole" && planet2.type === "planet2")) {
+            if (dist < minDist && dist > 0) {
               const planet2Obj = planet1.type === "planet2" ? planet1 : planet2;
               const blackhole = planet1.type === "blackhole" ? planet1 : planet2;
               
@@ -1445,7 +1441,6 @@ export const GameCanvas = () => {
               planet2Obj.vy += normalX * orbitStrength;
               
               createParticles(planet2Obj.x, planet2Obj.y, "hsl(180, 100%, 50%)", 3);
-              return;
             }
           }
         });
@@ -1655,9 +1650,8 @@ export const GameCanvas = () => {
               starLevel = 1;
             }
             
-            // Award star points with combo
+            // Award star points with combo and play sound
             awardPoints(`Lvl ${starLevel} Star Collected!`, starValue, 1500);
-            
             playSound('starAcquire');
           }
         }
@@ -1751,7 +1745,7 @@ export const GameCanvas = () => {
             
             // Show pickup notification
             showPickupNotification(
-              "Unlimited Ammo! +500 pts",
+              "∞ Unlimited Ammo! +500 pts",
               'bg-gradient-to-r from-gray-300 to-slate-400 text-slate-900 font-bold shadow-lg'
             );
           }
@@ -1805,62 +1799,8 @@ export const GameCanvas = () => {
       game.voidWipes = game.voidWipes.filter(v => !v.collected);
 
       // Star-Obstacle interactions
-      game.stars.forEach((star, starIndex) => {
-        if (star.collected) return;
-        
-        game.planets.forEach((planet, planetIndex) => {
-          const dx = star.x - planet.x;
-          const dy = star.y - planet.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          const collisionDist = star.radius + planet.radius;
-          
-          if (dist < collisionDist) {
-            // Different interactions based on obstacle type
-            switch (planet.type) {
-              case "meteor":
-                // Meteors destroy stars in a small explosion
-                createParticles(star.x, star.y, "hsl(60, 100%, 50%)", 8);
-                createParticles(planet.x, planet.y, "hsl(0, 100%, 70%)", 5);
-                star.collected = true;
-                
-                // Score handled by GameEngine
-                playSound('starAcquire');
-                break;
-                
-              case "planet2":
-                // Planet2 absorbs stars and grows slightly
-                createParticles(star.x, star.y, "hsl(60, 100%, 50%)", 6);
-                createParticles(planet.x, planet.y, "hsl(180, 100%, 50%)", 4);
-                planet.radius += 0.5; // Slight growth
-                star.collected = true;
-                
-                // Score handled by GameEngine
-                playSound('starAcquire');
-                break;
-                
-              case "blackhole":
-                // Blackholes absorb stars dramatically
-                createParticles(star.x, star.y, "hsl(60, 100%, 50%)", 12);
-                createParticles(planet.x, planet.y, "hsl(270, 100%, 50%)", 8);
-                star.collected = true;
-                
-                // Score handled by GameEngine
-                playSound('starAcquire');
-                break;
-                
-              case "debris":
-                // Debris and stars create a small sparkle effect
-                createParticles(star.x, star.y, "hsl(60, 100%, 50%)", 4);
-                createParticles(planet.x, planet.y, "hsl(30, 100%, 60%)", 3);
-                star.collected = true;
-                
-                // Score handled by GameEngine
-                playSound('starAcquire');
-                break;
-            }
-          }
-        });
-      });
+      // Star-Planet collisions - NOW FULLY HANDLED BY GameEngine with rate limiting
+      // (removed duplicate detection from GameCanvas to prevent double sounds)
 
       // === TESTING: Delegate particle updates to GameEngine ===
       // Sync current particles TO engine (from createParticles calls in GameCanvas)
@@ -1953,6 +1893,18 @@ export const GameCanvas = () => {
         setIsRecharging(false);
         playSound('shipUpgrades');
         triggerCaptainLevelUpDialog('level2');
+        
+        // Show help popup with only shooting instruction after captain dialog dismisses
+        setTimeout(() => {
+          setHelpFilter('shoot'); // Filter to show only shooting line
+          setShowHelp(true);
+          
+          // Auto-dismiss after 5 seconds
+          setTimeout(() => {
+            setShowHelp(false);
+            setHelpFilter(null); // Clear filter
+          }, 5000);
+        }, 3500); // Wait for captain dialog (3s) + small delay
       }
       
       if (isUpgradedToShip3 && !hasUpgradedToShip3) {
@@ -2077,6 +2029,7 @@ export const GameCanvas = () => {
               isRecharging={isRecharging}
               currentDifficulty={currentDifficulty}
               showHelp={showHelp}
+              helpFilter={helpFilter}
               showJoystick={showJoystick}
               isMobile={isMobile}
               isMuted={isMuted}
@@ -2084,7 +2037,10 @@ export const GameCanvas = () => {
                 setGameState("paused");
                 setAudioGameState(GameState.PAUSED); // Update audio volume for pause menu
               }}
-              onToggleHelp={() => setShowHelp(!showHelp)}
+              onToggleHelp={() => {
+                setHelpFilter(null); // Clear filter when manually toggled
+                setShowHelp(!showHelp);
+              }}
               onToggleJoystick={handleToggleJoystick}
               onToggleMute={toggleMute}
               onDifficultyChange={handleDifficultyChange}
@@ -2159,7 +2115,10 @@ export const GameCanvas = () => {
       {/* Floating Help Button - Desktop only, bottom right */}
       {gameState === "playing" && !isMobile && (
         <button
-          onClick={() => setShowHelp(!showHelp)}
+          onClick={() => {
+            setHelpFilter(null); // Clear any filter when manually opened
+            setShowHelp(!showHelp);
+          }}
           className="help-button fixed bottom-1 right-1 w-12 h-12 rounded-full bg-primary/20 border-2 border-primary/30 text-primary hover:bg-primary/30 transition-colors flex items-center justify-center text-2xl font-bold z-[70] shadow-lg"
           style={{ backdropFilter: 'blur(8px)' }}
         >
