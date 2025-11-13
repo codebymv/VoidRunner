@@ -28,13 +28,13 @@ export const SOUND_EFFECT_LEVELS = {
   SHOOTING: 0.8,
   
   /** Charge empty sound - 60% (warning feedback) */
-  CHARGE_EMPTY: 0.12,
+  CHARGE_EMPTY: 0.06,
   
   /** Charge ready sound - 70% (positive feedback) */
-  CHARGE_READY: 0.15,
+  CHARGE_READY: 0.06,
   
   /** Explosion sound - 85% (impactful) */
-  EXPLOSION: 0.04,
+  EXPLOSION: 0.01,
   
   /** Blackhole absorption sound - 39% (atmospheric) */
   BLACKHOLE_ABSORB: 0.002,
@@ -66,7 +66,7 @@ export const SOUND_EFFECT_LEVELS = {
   UNLIMITED_AMMO: 0.5,
   
   /** Void wipe pickup - 80% */
-  VOID_WIPE: 0.45,
+  VOID_WIPE: 0.65,
   
   // Upgrades & Special
   /** Ship upgrades sound - 40% (celebratory) */
