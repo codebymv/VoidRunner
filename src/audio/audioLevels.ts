@@ -39,34 +39,34 @@ export const SOUND_EFFECT_LEVELS = {
   /** Blackhole absorption sound - 39% (atmospheric) */
   BLACKHOLE_ABSORB: 0.002,
   
-  /** Meteor collision sound - 41% (impactful) */
-  METEOR_COLLISION: 0.03,
+  /** Meteor collision sound - 1% (impactful) */
+  METEOR_COLLISION: 0.01,
   
   /** Debris bounce sound - 36% (moderate feedback) */
   DEBRIS_BOUNCE: 0.01,
   
   // Ship & Damage
   /** Ship hit sound - 80% (impactful feedback) */
-  SHIP_HIT: 0.19,
+  SHIP_HIT: 0.18,
   
   /** Shield activation sound - 40% (subtle) */
-  SHIELD_ACTIVATE: 0.32,
+  SHIELD_ACTIVATE: 0.3,
   
   /** Vulnerable blink sound - 40% (subtle warning) */
   VULNERABLE_BLINK: 0.09,
   
   // Pickups & Collectibles
   /** Star collection sounds - 50% (moderate) */
-  STAR_ACQUIRE: 0.35,
+  STAR_ACQUIRE: 0.3,
   
   /** Health wrench pickup - 80% */
-  HEALTH_WRENCH: 0.65,
+  HEALTH_WRENCH: 0.5,
   
   /** Unlimited ammo pickup - 60% */
-  UNLIMITED_AMMO: 0.65,
+  UNLIMITED_AMMO: 0.5,
   
   /** Void wipe pickup - 80% */
-  VOID_WIPE: 0.5,
+  VOID_WIPE: 0.45,
   
   // Upgrades & Special
   /** Ship upgrades sound - 40% (celebratory) */
