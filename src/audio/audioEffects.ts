@@ -15,7 +15,7 @@ export interface AudioEffectsChain {
  */
 export const COMPRESSION_SETTINGS = {
   /** Start compressing at -12dB (less sensitive, less ducking) */
-  THRESHOLD: -12,
+  THRESHOLD: -10,
   
   /** Softer knee for gentler, more musical compression */
   KNEE: 10,
@@ -35,19 +35,20 @@ export const COMPRESSION_SETTINGS = {
  * Brick-wall limiter to prevent clipping and distortion
  */
 export const LIMITER_SETTINGS = {
-  /** Hard limit at -0.1dB to prevent clipping */
-  THRESHOLD: -0.1,
+  /** Give 2dB of headroom before limiting */
+  THRESHOLD: -2.0, 
   
-  /** Hard knee for brick-wall limiting */
-  KNEE: 0,
+  /** Soften the "knee" just a bit */
+  KNEE: 2, 
   
-  /** 20:1 ratio for hard limiting */
-  RATIO: 20,
+  /** This is still limiting, but less aggressive than 20:1 */
+  RATIO: 10, 
   
-  /** 0ms attack for instant limiting */
-  ATTACK: 0,
+  /** * CRITICAL: Let the *very* beginning of a sound (the transient)
+   * poke through. 0.001s (1ms) is all you need to add "punch".
+   */
+  ATTACK: 0.001, 
   
-  /** 0.1s release for fast recovery */
   RELEASE: 0.1,
 } as const;
 
@@ -56,11 +57,8 @@ export const LIMITER_SETTINGS = {
  * Compensates for compression gain reduction
  */
 export const MAKEUP_GAIN_SETTINGS = {
-  /** 
-   * Linear gain multiplier: 1.5 ≈ +3.5dB boost
-   * Compensates for compression without over-driving
-   */
-  GAIN: 1.3,
+  // ...
+  GAIN: 1.1, // ~ +0.8dB boost
 } as const;
 
 /**
