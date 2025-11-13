@@ -9,10 +9,10 @@
  */
 export const MUSIC_LEVELS = {
   /** Menu music volume - 9% for subtle background atmosphere */
-  MENU: 0.06,
+  MENU: 0.08,
   
   /** Gameplay music volume - 15% to stay under gameplay sounds */
-  GAMEPLAY: 0.09,
+  GAMEPLAY: 0.11,
   
   /** Crossfade duration between tracks in seconds */
   CROSSFADE_DURATION: 3.0,
@@ -83,7 +83,7 @@ export const SOUND_EFFECT_LEVELS = {
   GAME_OVER: 0.26,
   
   /** Default sound effect volume - 110% */
-  DEFAULT: 0.7,
+  DEFAULT: 0.6,
 } as const;
 
 /**
@@ -95,7 +95,7 @@ export const VOICE_LEVELS = {
   SPEECH_BASE: 1.0,
   
   /** Individual speech file volume - 95% */
-  SPEECH_FILE: 0.96,
+  SPEECH_FILE: 0.9,
 } as const;
 
 /**
