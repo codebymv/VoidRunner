@@ -1,0 +1,69 @@
+1. Complete the Logic Migration to GameEngine.ts
+This is the most critical step for making future development easier. The GameEngine.ts class is designed to be "headless," meaning it handles all game logic without any knowledge of React or how to draw on the screen.
+
+However, GameCanvas.tsx still contains the entire main gameLoop inside a useEffect hook, along with many helper functions for logic.
+
+Your next steps should be:
+
+Move the gameLoop: The logic inside the requestAnimationFrame loop in GameCanvas.tsx should be moved into a single update(delta, input) method in GameEngine.ts.
+
+Move Logic Helpers: All of the following functions and logic blocks currently in GameCanvas.tsx belong inside GameEngine.ts:
+
+spawnPlanet, spawnStar, spawnHealthWrench, spawnVoidWipe
+
+createParticles, createExplosion
+
+takeDamage (and the health/shield logic)
+
+awardPoints (and the combo logic)
+
+All collision detection (like ship-to-planet, ship-to-scrap, and bullet-to-planet checks).
+
+Use Callbacks: GameEngine.ts is already set up to communicate with React via callbacks like onScoreChange, onHealthChange, onGameOver, and onShowToast. Instead of calling setScore or setHealth directly, the engine should just call these callbacks. The GameCanvas.tsx component will be responsible for providing these functions, which do call setScore and setHealth.
+
+After this, your gameLoop in GameCanvas.tsx will become beautifully simple, just as refactor.md envisioned:
+
+TypeScript
+
+// The new, simplified game loop in GameCanvas.tsx
+const gameLoop = () => {
+  // ... (calculate delta) ...
+  const input = { keys: keysRef.current, joystick: joystickInputRef.current };
+
+  // 1. Run all game logic
+  gameEngineRef.current.update(delta, input); 
+
+  // 2. Get the new state
+  const state = gameEngineRef.current.getState(); 
+
+  // 3. Draw everything (This is Step 2)
+  rendererRef.current.render(ctx, state); 
+
+  animationId = requestAnimationFrame(gameLoop);
+};
+2. Create a Dedicated Renderer.ts Class
+Once the logic is separated, the next step is to separate the rendering. GameCanvas.tsx's game loop is still full of ctx.drawImage, ctx.fillStyle, ctx.beginPath, etc..
+
+As outlined in refactor.md, you should create a Renderer.ts class.
+
+Responsibility: This class will hold references to all the loaded images (like shipIdleImg, meteorImg, blackholeImg).
+
+Main Method: It will have one primary method, render(ctx, gameState), which takes the canvas context and the full game state from gameEngine.getState().
+
+No Logic: This class will contain zero game logic. It just reads the x, y, angle, and radius from the game state objects and draws them to the canvas.
+
+This separation means your game logic (GameEngine) and rendering (Renderer) are completely independent. You could change the rendering from 2D canvas to WebGL without touching a single line of game logic.
+
+3. Leverage and Expand Existing Optimizations
+Your GameEngine.ts file already includes several smart optimizations. You should lean into these to improve performance.
+
+Object Pooling: You are already using a ParticlePool to reuse particle objects instead of constantly creating and deleting them. This is excellent for performance. You should apply this same concept to Bullets and possibly even obstacles (Planets) to reduce garbage collection.
+
+Spatial Grid: You have a SpatialGrid for "optimized collision detection". You must ensure all collision checks (ship-to-planet, bullet-to-planet, planet-to-planet) use this grid. This will drastically reduce the number of calculations needed, changing the collision detection from an O(n²) problem (checking everything against everything) to something much faster.
+
+Sound Rate Limiting: You've correctly added cooldowns for sounds like blackholeAbsorb and debrisBounce. This prevents audio overload and is a great optimization to keep.
+
+4. (Already Done) UI Component Separation
+The refactor.md file lists separating the UI menus as the first step. Looking at your GameCanvas.tsx file's return statement, you have already successfully done this by importing and using <MainMenu />, <PauseMenu />, and <GameOverMenu /> as separate components. This is perfect and follows the plan exactly.
+
+By focusing on completing the migration to GameEngine.ts and then creating the Renderer.ts, you will fully realize the clean, maintainable, and high-performance architecture outlined in your refactor plan.
