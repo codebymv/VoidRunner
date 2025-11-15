@@ -13,6 +13,8 @@ import type {
   AmmoPowerUp
 } from './types';
 import { ParticlePool, ANGLE_LUT } from '../utils/ParticlePool';
+import { createBullet, FIRE_RATE, AUTO_FIRE_RATE, AMMO_DRAIN_RATE, BULLET_SPEED } from '@/utils/shooting';
+import { findNearestEnemy, calculateLeadShot } from '@/utils/autoTargeting';
 import { SpatialGrid } from '../utils/SpatialGrid';
 
 /**
@@ -71,6 +73,10 @@ export class GameEngine {
   
   private lastMeteorCollisionSound: number = 0;
   private METEOR_COLLISION_COOLDOWN: number = 300; // 300ms between sounds
+  
+  // Weapon firing timers
+  private lastShotTime: number = 0;
+  private lastAutoShotTime: number = 0;
   
   private lastExplosionSound: number = 0;
   private EXPLOSION_COOLDOWN: number = 200; // 200ms between sounds
@@ -150,10 +156,21 @@ export class GameEngine {
    * @param delta - Time delta multiplier (1.0 = 60fps)
    */
   public update(delta: number): void {
+    // NOTE: Weapon firing is handled separately BEFORE update() is called
+    // This ensures bullets are created first, then updated with other entities
+    
     // Update physics (gravity, movement, friction)
     this.updatePhysics(delta);
     
-    // Update entities (planets, scraps, particles)
+    // Decay screen shake effect
+    if (this.state.shake > 0) {
+      this.state.shake *= 0.9;
+      if (this.state.shake < 0.1) {
+        this.state.shake = 0; // Stop shake when very small
+      }
+    }
+    
+    // Update entities (planets, scraps, bullets, particles)
     this.updateEntities(delta);
     
     // Spawning system
@@ -874,15 +891,136 @@ export class GameEngine {
     return isAccelerating;
   }
 
+  /**
+   * Process weapon firing (manual + auto-targeting)
+   * Returns true if a shot was fired (for recharge timer tracking)
+   */
+  public processWeaponFiring(
+    hasWeapon: boolean,
+    hasUpgradedToShip3: boolean,
+    isRecharging: boolean,
+    isUnlimitedAmmo: boolean,
+    currentAmmo: number,
+    rechargeStartTimeRef: { current: number }
+  ): boolean {
+    if (!hasWeapon) return false;
+    
+    const now = Date.now();
+    let shotFired = false;
+    
+    // === MANUAL SHOOTING (Spacebar) ===
+    if (this.state.keys[" "] && !isRecharging) {
+      if (now - this.lastShotTime > FIRE_RATE) {
+        if (isUnlimitedAmmo || currentAmmo > 0) {
+          // Create bullet
+          const bullet = createBullet(this.state.ship, hasUpgradedToShip3);
+          this.state.bullets.push(bullet);
+          
+          // Track shot for achievement
+          this.callbacks.onShotFired();
+          
+          // Drain ammo (unless unlimited)
+          if (!isUnlimitedAmmo) {
+            const newAmmo = currentAmmo - AMMO_DRAIN_RATE;
+            if (newAmmo <= 0) {
+              this.callbacks.onRechargeStateChange(true);
+              rechargeStartTimeRef.current = now;
+              this.callbacks.onPlaySound('chargeEmpty');
+            }
+            this.callbacks.onAmmoChange(Math.max(0, newAmmo));
+          }
+          
+          this.lastShotTime = now;
+          shotFired = true;
+          
+          // Play appropriate shoot sound
+          const shootSound = hasUpgradedToShip3 ? 'shoot2' : 'shoot1';
+          this.callbacks.onPlaySound(shootSound);
+        }
+      }
+    }
+    
+    // === AUTO-TARGETING (Level 3 only) ===
+    if (hasUpgradedToShip3 && !isRecharging) {
+      if (now - this.lastAutoShotTime > AUTO_FIRE_RATE) {
+        if (isUnlimitedAmmo || currentAmmo > 0) {
+          // Find nearest enemy within range
+          const target = findNearestEnemy(this.state.ship, this.state.planets, 400);
+          
+          if (target) {
+            // Calculate lead shot for moving targets
+            const targetAngle = calculateLeadShot(this.state.ship, target.planet, BULLET_SPEED);
+            
+            // Create auto-targeting bullet
+            const bullet = createBullet(this.state.ship, true, targetAngle);
+            this.state.bullets.push(bullet);
+            
+            // Track shot for achievement
+            this.callbacks.onShotFired();
+            
+            // Drain ammo (unless unlimited)
+            if (!isUnlimitedAmmo) {
+              const newAmmo = currentAmmo - AMMO_DRAIN_RATE;
+              if (newAmmo <= 0) {
+                this.callbacks.onRechargeStateChange(true);
+                rechargeStartTimeRef.current = now;
+                this.callbacks.onPlaySound('chargeEmpty');
+              }
+              this.callbacks.onAmmoChange(Math.max(0, newAmmo));
+            }
+            
+            this.lastAutoShotTime = now;
+            shotFired = true;
+            
+            // Play auto-targeting shoot sound
+            this.callbacks.onPlaySound('shoot2');
+          }
+        }
+      }
+    }
+    
+    return shotFired;
+  }
+
   // ============================================================================
   // PRIVATE HELPER METHODS
   // ============================================================================
 
   /**
+   * Set current score and difficulty for spawn calculations
+   */
+  public setScoreAndDifficulty(score: number, difficulty: number): void {
+    this.currentScore = score;
+    this.currentDifficulty = difficulty;
+  }
+  
+  private currentScore: number = 0;
+  private currentDifficulty: number = 1;
+  
+  /**
    * Handle spawning of stars and other collectibles
    */
   private updateSpawning(): void {
     const now = Date.now();
+    
+    // Check if in respite period after void wipe
+    const RESPITE_DURATION = 3000;
+    const lastVoidWipe = this.gameRef?.lastVoidWipeCollected || 0;
+    const inRespitePeriod = lastVoidWipe > 0 && (now - lastVoidWipe < RESPITE_DURATION);
+    
+    // Planet spawning - difficulty-based rate
+    if (!inRespitePeriod) {
+      const basePlanetInterval = 2000 / Math.max(1, this.currentDifficulty);
+      // Apply a multiplier based on difficulty (placeholder, can be customized)
+      const planetInterval = basePlanetInterval;
+      
+      if (now - this.state.lastPlanetSpawn > planetInterval) {
+        // Determine planet type based on score/difficulty
+        const planetType = this.determinePlanetType();
+        this.spawnPlanet(planetType);
+        this.state.lastPlanetSpawn = now;
+      }
+    }
     
     // Star spawning - every 3 seconds base rate
     const starInterval = 3000;
@@ -890,6 +1028,51 @@ export class GameEngine {
       this.spawnStar();
       this.state.lastStarSpawn = now;
     }
+    
+    // Health wrench spawning - rare, after 30 seconds
+    const gameRunTime = now - this.state.gameStartTime;
+    if (gameRunTime > 30000 && now - this.state.lastHealthWrenchSpawn > 35000) {
+      if (Math.random() < 0.04) { // 4% chance per eligible frame
+        this.spawnHealthWrench();
+        this.state.lastHealthWrenchSpawn = now;
+      }
+    }
+    
+    // Ammo power-up spawning - rare, after 20 seconds, level 2+ only (when player has weapons)
+    const hasWeapon = this.currentScore >= 1500; // Level 2: weapons unlocked
+    if (hasWeapon && gameRunTime > 20000 && now - this.state.lastAmmoPowerUpSpawn > 25000) {
+      if (Math.random() < 0.05) { // 5% chance per eligible frame
+        this.spawnAmmoPowerUp();
+        this.state.lastAmmoPowerUpSpawn = now;
+      }
+    }
+  }
+  
+  /**
+   * Determine planet type based on current score/difficulty
+   */
+  private determinePlanetType(): string {
+    const score = this.currentScore;
+    
+    // Early game (0-1000): mostly meteors
+    if (score < 1000) {
+      return Math.random() < 0.7 ? "meteor" : "debris";
+    }
+    
+    // Mid game (1000-5000): introduce planets
+    if (score < 5000) {
+      const rand = Math.random();
+      if (rand < 0.4) return "meteor";
+      if (rand < 0.7) return "debris";
+      return "planet2";
+    }
+    
+    // Late game (5000+): all types including blackholes
+    const rand = Math.random();
+    if (rand < 0.25) return "meteor";
+    if (rand < 0.45) return "debris";
+    if (rand < 0.7) return "planet2";
+    return "blackhole";
   }
 
   /**
@@ -1054,11 +1237,11 @@ export class GameEngine {
         bullet.x += bullet.vx * delta;
         bullet.y += bullet.vy * delta;
         
-        // Update lifetime
-        bullet.lifetime -= delta;
+        // Update lifetime (count UP from 0 to maxLifetime)
+        bullet.lifetime += delta;
         
         // Remove bullets that expired or went off screen
-        if (bullet.lifetime <= 0) {
+        if (bullet.lifetime >= bullet.maxLifetime) {
           return false;
         }
         
@@ -1071,7 +1254,7 @@ export class GameEngine {
   /**
    * Check star-obstacle collisions
    */
-  private checkStarObstacleCollisions(): void {
+  public checkStarObstacleCollisions(): void {
     this.state.stars.forEach((star) => {
       if (star.collected) return;
       
@@ -1157,7 +1340,7 @@ export class GameEngine {
    * Check obstacle-obstacle collisions (OPTIMIZED with spatial grid!)
    * Reduces collision checks from O(n²) to O(n) using broad-phase detection
    */
-  private checkObstacleCollisions(): void {
+  public checkObstacleCollisions(): void {
     // Build spatial grid (broad-phase)
     this.spatialGrid.clear();
     this.state.planets.forEach(planet => this.spatialGrid.insert(planet));
@@ -1585,7 +1768,7 @@ export class GameEngine {
   /**
    * Check bullet collisions with obstacles
    */
-  private checkBulletCollisions(): void {
+  public checkBulletCollisions(): void {
     this.state.bullets = this.state.bullets.filter(bullet => {
       let bulletHit = false;
       
@@ -1681,7 +1864,7 @@ export class GameEngine {
   /**
    * Check ship collisions with planets and near-misses
    */
-  private checkShipCollisions(): void {
+  public checkShipCollisions(): void {
     // Update invulnerability frames
     if (this.state.invulnerable > 0) {
       // Play vulnerable blink sound at intervals
@@ -1704,9 +1887,8 @@ export class GameEngine {
           this.callbacks.onPlaySound('shieldActivate');
           this.state.shake = 20;
           
-          // Note: Damage application is handled in GameCanvas via onHealthChange callback
-          // GameCanvas manages health/shield state and triggers onGameOver when needed
-          this.callbacks.onPlaySound('shipHit');
+          // Trigger damage callback (GameCanvas handles health/shield/game over logic)
+          this.callbacks.onTakeDamage(1.0); // 33% damage (1 full health point)
         }
       });
 
@@ -1730,6 +1912,9 @@ export class GameEngine {
         if (distSq > collisionRangeSq && distSq < nearMissRangeSq && planetSpeed > highSpeedThreshold) {
           if (!this.state.nearMissTracker.has(planet.id)) {
             this.state.nearMissTracker.set(planet.id, Date.now());
+            
+            // Track near-miss for achievements
+            this.callbacks.onTrackNearMiss();
             
             // Calculate points based on planet type and speed
             let nearMissPoints = Math.round(100 + (planetSpeed * 10));
@@ -1775,7 +1960,7 @@ export class GameEngine {
   /**
    * Check collisions between ship and collectibles
    */
-  private checkCollectibleCollisions(): void {
+  public checkCollectibleCollisions(): void {
     // Star collection
     this.state.stars.forEach(star => {
       if (!star.collected) {
@@ -1818,23 +2003,13 @@ export class GameEngine {
         
         if (distSq < acquisitionRadius * acquisitionRadius) {
           wrench.collected = true;
-          this.callbacks.onPlaySound('healthWrench');
           
-          // Show pickup notification
-          this.callbacks.onShowPickupNotification(
-            "Repairs! +150 pts",
-            'bg-gradient-to-r from-green-400 to-emerald-500 text-slate-900 font-bold shadow-lg'
-          );
+          // Create green healing particles (engine handles visual effects)
+          this.createParticles(wrench.x, wrench.y, "hsl(120, 100%, 50%)", 20);
+          this.createParticles(wrench.x, wrench.y, "hsl(140, 100%, 70%)", 15);
           
-          // Trigger health glow effect
-          this.callbacks.onHealthGlow(1000);
-          
-            // Create particles
-            this.createParticles(wrench.x, wrench.y, "hsl(120, 100%, 50%)", 20);
-            this.createParticles(wrench.x, wrench.y, "hsl(140, 100%, 70%)", 15);
-            
-            // Award points for health pickup
-            this.awardPoints("Repairs", 150, 1500);
+          // Trigger health restoration callback (handles React state: health, shield)
+          this.callbacks.onHealthWrenchCollected(wrench.x, wrench.y);
           }
         }
       });
@@ -1853,29 +2028,58 @@ export class GameEngine {
         if (distSq < minDist * minDist) {
           powerUp.collected = true;
           
-          // Activate unlimited ammo
-          const UNLIMITED_AMMO_DURATION = 10000; // 10 seconds
-          this.callbacks.onUnlimitedAmmoChange(true, Date.now() + UNLIMITED_AMMO_DURATION);
-          this.callbacks.onAmmoChange(100);
-          this.callbacks.onRechargeStateChange(false);
-          this.callbacks.onPlaySound('unlimitedAmmo');
-          
-          this.createParticles(powerUp.x, powerUp.y, "hsl(45, 100%, 50%)", 30);
-          
-          // Show pickup notification
-            this.callbacks.onShowPickupNotification(
-              "∞ Unlimited Ammo! +500 pts",
-              'bg-gradient-to-r from-gray-300 to-slate-400 text-slate-900 font-bold shadow-lg'
-            );
-            
-            // Award points for ammo pickup
-            this.awardPoints("Unlimited Ammo!", 500, 1500);
+          // Trigger ammo power-up callback (handles React state: ammo, recharge, unlimited)
+          this.callbacks.onAmmoPowerUpCollected();
           }
         }
       });
     
     // Remove collected power-ups
     this.state.ammoPowerUps = this.state.ammoPowerUps.filter(p => !p.collected);
+    
+    // Void Wipe collection
+    const voidWipes = this.gameRef?.voidWipes || [];
+    voidWipes.forEach(voidWipe => {
+      if (!voidWipe.collected) {
+        const dx = voidWipe.x - this.state.ship.x;
+        const dy = voidWipe.y - this.state.ship.y;
+        const distSq = dx * dx + dy * dy;
+        const minDist = this.state.ship.radius + voidWipe.radius;
+        
+        if (distSq < minDist * minDist) {
+          voidWipe.collected = true;
+          
+          // Create massive purple particle explosion
+          this.createParticles(voidWipe.x, voidWipe.y, "hsl(270, 100%, 70%)", 100);
+          this.createParticles(this.state.ship.x, this.state.ship.y, "hsl(270, 100%, 50%)", 50);
+          
+          // Destroy ALL obstacles with explosions
+          this.state.planets.forEach(planet => {
+            this.createParticles(planet.x, planet.y, planet.color, 30);
+            this.createParticles(planet.x, planet.y, "hsl(270, 100%, 60%)", 20);
+          });
+          
+          // Clear all obstacles
+          this.state.planets = [];
+          
+          // Screen shake effect for dramatic impact
+          this.state.shake = 15;
+          
+          // Set respite period - prevent new obstacles from spawning for 3 seconds
+          if (this.gameRef) {
+            this.gameRef.lastVoidWipeCollected = Date.now();
+          }
+          
+          // Trigger void wipe callback (handles React state: score, notifications, sounds)
+          this.callbacks.onVoidWipeCollected(voidWipe.x, voidWipe.y);
+        }
+      }
+    });
+    
+    // Remove collected void wipes
+    if (this.gameRef?.voidWipes) {
+      this.gameRef.voidWipes = this.gameRef.voidWipes.filter(v => !v.collected);
+    }
     
     // Scrap collection/damage
     // Note: Scrap damage handling will be done in Phase 8 (Ship-Planet Collisions)
@@ -1909,7 +2113,8 @@ export class GameEngine {
         this.state.invulnerable = 60;
         this.state.shake = 8;
         this.callbacks.onPlaySound('shieldActivate');
-        // Note: Damage application (0.45 health) is handled in GameCanvas
+        // Trigger damage callback (15% damage)
+        this.callbacks.onTakeDamage(0.45);
         return false; // Remove scrap
       }
       
@@ -1987,7 +2192,7 @@ export class GameEngine {
   /**
    * Spawn a planet/obstacle from a random edge
    */
-  private spawnPlanet(planetType: "debris" | "meteor" | "planet2" | "blackhole"): void {
+  public spawnPlanet(planetType: "debris" | "meteor" | "planet2" | "blackhole"): void {
     const side = Math.floor(Math.random() * 4);
     let x, y;
     
@@ -2059,7 +2264,7 @@ export class GameEngine {
   /**
    * Spawn a collectible star
    */
-  private spawnStar(): void {
+  public spawnStar(): void {
     this.state.stars.push({
       x: Math.random() * this.canvasWidth,
       y: Math.random() * this.canvasHeight,
@@ -2074,7 +2279,7 @@ export class GameEngine {
   /**
    * Spawn a health wrench pickup
    */
-  private spawnHealthWrench(): void {
+  public spawnHealthWrench(): void {
     // Spawn away from ship to avoid instant collection (optimized with squared distance)
     let x, y;
     const minDistSq = 150 * 150;
@@ -2097,7 +2302,7 @@ export class GameEngine {
   /**
    * Spawn an ammo power-up
    */
-  private spawnAmmoPowerUp(): void {
+  public spawnAmmoPowerUp(): void {
     // Spawn away from ship to avoid instant collection (optimized with squared distance)
     let x, y;
     const minDistSq = 200 * 200;
@@ -2115,6 +2320,23 @@ export class GameEngine {
       collected: false,
       pulsePhase: 0
     });
+  }
+
+  /**
+   * Spawn a void wipe power-up (clears all obstacles)
+   */
+  public spawnVoidWipe(): void {
+    // Spawn away from ship to avoid instant collection (optimized with squared distance)
+    let x, y;
+    const minDistSq = 200 * 200;
+    do {
+      x = Math.random() * this.canvasWidth;
+      y = Math.random() * this.canvasHeight;
+    } while ((x - this.state.ship.x) ** 2 + (y - this.state.ship.y) ** 2 < minDistSq);
+
+    // Note: voidWipes are stored in gameRef but managed similarly to other power-ups
+    // GameCanvas will need to handle the actual void wipe collection logic
+    // This method is a placeholder for future full migration
   }
 
   /**

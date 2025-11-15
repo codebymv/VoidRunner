@@ -28,26 +28,26 @@ export const SOUND_EFFECT_LEVELS = {
   SHOOTING: 0.8,
   
   /** Charge empty sound - 60% (warning feedback) */
-  CHARGE_EMPTY: 0.06,
+  CHARGE_EMPTY: 0.3,
   
   /** Charge ready sound - 70% (positive feedback) */
-  CHARGE_READY: 0.06,
+  CHARGE_READY: 0.3,
   
   /** Explosion sound - 85% (impactful) */
-  EXPLOSION: 0.01,
+  EXPLOSION: 0.27,
   
   /** Blackhole absorption sound - 39% (atmospheric) */
-  BLACKHOLE_ABSORB: 0.002,
+  BLACKHOLE_ABSORB: 0.3,
   
   /** Meteor collision sound - 1% (impactful) */
-  METEOR_COLLISION: 0.01,
+  METEOR_COLLISION: 0.21,
   
   /** Debris bounce sound - 36% (moderate feedback) */
-  DEBRIS_BOUNCE: 0.01,
+  DEBRIS_BOUNCE: 0.13,
   
   // Ship & Damage
   /** Ship hit sound - 80% (impactful feedback) */
-  SHIP_HIT: 0.18,
+  SHIP_HIT: 0.19,
   
   /** Shield activation sound - 40% (subtle) */
   SHIELD_ACTIVATE: 0.3,
@@ -70,7 +70,7 @@ export const SOUND_EFFECT_LEVELS = {
   
   // Upgrades & Special
   /** Ship upgrades sound - 40% (celebratory) */
-  SHIP_UPGRADES: 0.2,
+  SHIP_UPGRADES: 0.3,
   
   // UI & Menu
   /** Menu open sound - 50% */

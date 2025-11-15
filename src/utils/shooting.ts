@@ -4,7 +4,7 @@ export const BULLET_SPEED = 15; // Bullet speed
 export const BULLET_LIFETIME = 60; // Frames before bullet disappears
 export const FIRE_RATE = 100; // Milliseconds between shots
 export const AUTO_FIRE_RATE = 150; // Milliseconds between auto shots (faster for level 3)
-export const AMMO_DRAIN_RATE = 2; // Ammo consumed per shot
+export const AMMO_DRAIN_RATE = 4; // Ammo consumed per shot (increased for faster depletion)
 export const RECHARGE_TIME = 4000; // 4 seconds recharge time
 export const RECHARGE_AMOUNT = 100; // Full recharge
 

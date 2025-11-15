@@ -144,4 +144,10 @@ export interface GameEngineCallbacks {
   onHealthGlow: (duration: number) => void;
   onCreateParticles: (x: number, y: number, color: string, count: number) => void;
   onCreateExplosion: (x: number, y: number, blastRadius: number, force: number, excludeIndices: number[]) => void;
+  onTakeDamage: (damageAmount: number) => void; // Trigger damage to player ship
+  onTrackNearMiss: () => void; // Track near-miss for achievements
+  onHealthWrenchCollected: (x: number, y: number) => void; // Trigger health/shield restoration
+  onAmmoPowerUpCollected: () => void; // Trigger unlimited ammo activation
+  onVoidWipeCollected: (x: number, y: number) => void; // Trigger void wipe effect
+  onShotFired: () => void; // Track shots fired for achievement
 }

@@ -40,7 +40,12 @@ import {
 import { 
   createAudioEffectsChain, 
   connectEffectsChain,
-  type AudioEffectsChain 
+  type AudioEffectsChain,
+  getSoundVariationConfig,
+  getRandomPitchVariation,
+  getRandomVolumeVariation,
+  calculateSpatialPan,
+  SoundInstanceTracker
 } from './audioEffects';
 
 // Re-export GameState for backward compatibility
@@ -94,6 +99,10 @@ export class AudioManager {
   private isMuted: boolean = false;
   private volumeBeforeMute: number = 1; // Store volume level before muting
   private themeVolumeBeforeMute: number = 0; // Store theme volume before muting
+  
+  // Sound variation system (prevents late-game audio spam)
+  private soundInstanceTracker: SoundInstanceTracker = new SoundInstanceTracker();
+  private screenWidth: number = 1920; // Default screen width for spatial panning (updated by setScreenDimensions)
   
   private constructor() {
     // Don't initialize audio immediately - wait for user gesture
@@ -320,7 +329,25 @@ export class AudioManager {
     console.log('Ship engine loops initialized (idle/thrust crossfading system ready)');
   }
   
-  public async playSound(soundName: string, volumeMultiplier: number = 1.0): Promise<void> {
+  /**
+   * Updates screen dimensions for spatial panning calculations
+   * Should be called whenever canvas size changes
+   */
+  public setScreenDimensions(width: number): void {
+    this.screenWidth = width;
+  }
+  
+  /**
+   * Plays a sound effect with optional position for spatial panning
+   * @param soundName - Name of the sound to play
+   * @param volumeMultiplier - Volume multiplier (1.0 = default)
+   * @param position - Optional {x, y} position for spatial panning
+   */
+  public async playSound(
+    soundName: string, 
+    volumeMultiplier: number = 1.0, 
+    position?: { x: number; y: number }
+  ): Promise<void> {
     console.log(`🔊 Attempting to play sound: ${soundName} (volume multiplier: ${volumeMultiplier.toFixed(2)})`);
     
     // Initialize audio on first call (after user gesture)
@@ -333,6 +360,17 @@ export class AudioManager {
     if (!this.isAudioInitialized) {
       console.log('❌ Audio initialization failed, sound will be skipped');
       return;
+    }
+    
+    // === SOUND VARIATION SYSTEM (Late-Game Audio Spam Prevention) ===
+    const variationConfig = getSoundVariationConfig(soundName);
+    
+    // Check instance limit (prevent too many of the same sound playing at once)
+    if (variationConfig.maxInstances !== undefined) {
+      if (!this.soundInstanceTracker.canPlay(soundName, variationConfig.maxInstances)) {
+        console.log(`🔇 Sound '${soundName}' at max instances (${variationConfig.maxInstances}), skipping`);
+        return; // Sound is at limit, don't play
+      }
     }
     
     // Special handling for shield sound to use the pool for overlapping playback
@@ -471,29 +509,74 @@ try {
   // Get the desired volume (e.g., 1.5 for shooting)
   const individualVolume = getSoundEffectVolume(soundName);
 
-  // --- NEW VOLUME LOGIC ---
+  // === APPLY SOUND VARIATIONS ===
+  
+  // 1. Volume Variation (±10-20% randomization)
+  const volumeVariation = variationConfig.volumeVariation 
+    ? getRandomVolumeVariation(variationConfig.volumeVariation)
+    : 1.0;
+  
+  // 2. Pitch Variation (subtle randomization to prevent monotony)
+  const pitchVariation = variationConfig.pitchVariation
+    ? getRandomPitchVariation(variationConfig.pitchVariation)
+    : 1.0;
+  audio.playbackRate = pitchVariation;
+  
+  // 3. Spatial Panning (pan left/right based on screen position)
+  let panNode: StereoPannerNode | undefined;
+  if (variationConfig.enableSpatialPan && position && this.audioContext) {
+    panNode = this.audioContext.createStereoPanner();
+    const panValue = calculateSpatialPan(position.x, this.screenWidth);
+    panNode.pan.value = Math.max(-1, Math.min(1, panValue)); // Clamp to -1 to 1
+  }
+
   // Create a new, temporary GainNode for this specific sound
   const soundGain = this.audioContext.createGain();
-  soundGain.gain.value = individualVolume * volumeMultiplier;
+  soundGain.gain.value = individualVolume * volumeMultiplier * volumeVariation;
 
-  // Connect the shared source to our new gain, and our new gain to the main SFX bus
-  // sourceNode -> soundGain (1.5) -> soundEffectsGain (0.8) -> master
-  sourceNode.disconnect(this.soundEffectsGain); // Disconnect old path
+  // Connect audio graph: sourceNode -> soundGain -> [panNode] -> soundEffectsGain
+  try {
+    sourceNode.disconnect(this.soundEffectsGain); // Try to disconnect old path (may not be connected)
+  } catch {
+    // Ignore error if node wasn't connected (happens on first play or rapid replays)
+  }
   sourceNode.connect(soundGain);
-  soundGain.connect(this.soundEffectsGain);
+  
+  if (panNode) {
+    soundGain.connect(panNode);
+    panNode.connect(this.soundEffectsGain);
+  } else {
+    soundGain.connect(this.soundEffectsGain);
+  }
+
+  // Register this sound instance
+  this.soundInstanceTracker.registerInstance(soundName);
 
   // Reset audio to beginning and play
   audio.currentTime = 0;
-  console.log(`🎵 Playing sound '${soundName}' at volume ${individualVolume}`);
+  console.log(`🎵 Playing sound '${soundName}' at volume ${(individualVolume * volumeVariation).toFixed(2)}, pitch ${pitchVariation.toFixed(3)}x${panNode ? `, pan ${panNode.pan.value.toFixed(2)}` : ''}`);
   audio.play().catch(error => {
     console.error(`❌ Failed to play sound '${soundName}':`, error);
   });
 
   // IMPORTANT: Re-connect the source to the main bus after it finishes playing
   audio.onended = () => {
-    soundGain.disconnect();
-    sourceNode.disconnect(soundGain);
-    sourceNode.connect(this.soundEffectsGain!);
+    try {
+      // Unregister this sound instance
+      this.soundInstanceTracker.unregisterInstance(soundName);
+      
+      // Cleanup nodes
+      soundGain.disconnect();
+      if (panNode) {
+        panNode.disconnect();
+      }
+      sourceNode.disconnect(soundGain);
+      sourceNode.connect(this.soundEffectsGain!);
+    } catch {
+      // Ignore errors if nodes were already disconnected (rapid replays can cause this)
+      // Still try to unregister
+      this.soundInstanceTracker.unregisterInstance(soundName);
+    }
   };
 
 } catch (error) {
