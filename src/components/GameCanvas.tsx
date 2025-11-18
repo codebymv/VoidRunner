@@ -144,7 +144,7 @@ export const GameCanvas = () => {
   
   // Function to send stats to parent window (FlashCore portal)
   const sendStatsToParent = useCallback((score: number, nearMisses: number, repairs: number, shotsFired: number) => {
-    // Calculate achievements unlocked
+    // Calculate achievements unlocked (for display purposes - backend will also check)
     const achievements = [
       { id: 'rookie', threshold: 1500, check: () => score >= 1500 },
       { id: 'ace', threshold: 12500, check: () => score >= 12500 },
@@ -160,12 +160,18 @@ export const GameCanvas = () => {
     const achievementsTotal = achievements.length;
     
     // Send to parent window if in iframe
+    // IMPORTANT: Send metadata so backend can check stat-based achievements
     if (window.parent !== window) {
       window.parent.postMessage({
         type: 'game:stats',
         highScore: score,
         achievementsUnlocked,
-        achievementsTotal
+        achievementsTotal,
+        metadata: {
+          nearMisses: nearMisses,
+          repairs: repairs,
+          shotsFired: shotsFired
+        }
       }, '*');
     }
   }, []);
