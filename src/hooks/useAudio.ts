@@ -67,8 +67,8 @@ export const useAudio = () => {
     setIsMutedState(audioManager.isMutedState());
   }, []);
 
-  const playSound = useCallback(async (soundName: string) => {
-    await audioManager.playSound(soundName);
+  const playSound = useCallback(async (soundName: string, volumeMultiplier?: number) => {
+    await audioManager.playSound(soundName, volumeMultiplier);
   }, []);
 
   return {
@@ -77,23 +77,23 @@ export const useAudio = () => {
     currentGameState,
     masterVolume,
     isMuted,
-    
+
     // Theme music controls
     startThemeMusic,
     stopThemeMusic,
     pauseThemeMusic,
     resumeThemeMusic,
-    
+
     // Game state management
     setGameState,
-    
+
     // Volume controls
     setMasterVolume,
-    
+
     // Mute controls
     toggleMute,
     setMute,
-    
+
     // Sound effects
     playSound,
     playMenuOpen: async () => {
@@ -104,7 +104,7 @@ export const useAudio = () => {
       console.log('🎵 useAudio playMenuClose called');
       await audioManager.playMenuClose();
     },
-    
+
     // Game states enum for convenience
     GameState
   };

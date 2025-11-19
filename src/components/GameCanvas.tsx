@@ -139,12 +139,12 @@ export const GameCanvas = () => {
   const [previousHighScore, setPreviousHighScore] = useState(0); // Track previous high score for display
   // High score as reported by the FlashCore portal/database
   const [portalHighScore, setPortalHighScore] = useState(0);
-  
+
   // Achievement stat tracking
   const [totalNearMisses, setTotalNearMisses] = useState(() => parseInt(localStorage.getItem("totalNearMisses") || "0"));
   const [totalRepairs, setTotalRepairs] = useState(() => parseInt(localStorage.getItem("totalRepairs") || "0"));
   const [totalShotsFired, setTotalShotsFired] = useState(() => parseInt(localStorage.getItem("totalShotsFired") || "0"));
-  
+
   // Function to send stats to parent window (FlashCore portal)
   const sendStatsToParent = useCallback((score: number, nearMisses: number, repairs: number, shotsFired: number) => {
     // Calculate achievements unlocked (for display purposes - backend will also check)
@@ -158,10 +158,10 @@ export const GameCanvas = () => {
       { id: 'builtdifferent', threshold: 50, check: () => repairs >= 50 },
       { id: 'lockedin', threshold: 5000, check: () => shotsFired >= 5000 },
     ];
-    
+
     const achievementsUnlocked = achievements.filter(a => a.check()).length;
     const achievementsTotal = achievements.length;
-    
+
     // Send to parent window if in iframe
     // IMPORTANT: Send metadata so backend can check stat-based achievements
     if (window.parent !== window) {
@@ -187,7 +187,7 @@ export const GameCanvas = () => {
   const hasUpgradedToShip3Ref = useRef(false); // Ref to prevent duplicate upgrade triggers (race condition fix)
   const [showHelp, setShowHelp] = useState(false); // State for help popup
   const [helpFilter, setHelpFilter] = useState<string | null>(null); // Filter help to show only specific line
-  
+
   // Shooting system state
   const [ammo, setAmmo] = useState(100);
   const ammoRef = useRef(100); // Ref for immediate ammo tracking (prevents stale state in engine)
@@ -204,11 +204,11 @@ export const GameCanvas = () => {
   const [showGameOverDialog, setShowGameOverDialog] = useState(false); // State for game over captain dialog
   const [levelUpMessage, setLevelUpMessage] = useState(""); // Current level-up message
   const [gameOverMessage, setGameOverMessage] = useState(""); // Current game over message
-  
+
   // Difficulty management
   const difficultyManagerRef = useRef<DifficultyManager>(new DifficultyManager('medium'));
   const [currentDifficulty, setCurrentDifficulty] = useState<DifficultyLevel>('medium');
-  
+
   // Auto-switch from hard difficulty if not unlocked.
   // Uses the max of local and portal high scores so unlocks follow the database.
   useEffect(() => {
@@ -219,7 +219,7 @@ export const GameCanvas = () => {
       setCurrentDifficulty('medium');
     }
   }, [currentDifficulty, highScore, portalHighScore]);
-  
+
   // Send stats to parent window (FlashCore portal) only on game over
   // This prevents overwriting DB scores on initial load
   useEffect(() => {
@@ -228,7 +228,7 @@ export const GameCanvas = () => {
       sendStatsToParent(score, totalNearMisses, totalRepairs, totalShotsFired);
     }
   }, [gameState, score, totalNearMisses, totalRepairs, totalShotsFired, sendStatsToParent]);
-  
+
   // Listen for stats coming from the FlashCore portal (database-backed stats)
   useEffect(() => {
     const handlePortalMessage = (event: MessageEvent) => {
@@ -248,11 +248,11 @@ export const GameCanvas = () => {
     window.addEventListener('message', handlePortalMessage);
     return () => window.removeEventListener('message', handlePortalMessage);
   }, []);
-  
+
   // Close help popup when clicking outside
   useEffect(() => {
     if (!showHelp) return;
-    
+
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       // Check if click is outside the help popup and help button
@@ -260,18 +260,18 @@ export const GameCanvas = () => {
         setShowHelp(false);
       }
     };
-    
+
     // Add small delay to prevent immediate closing when opening
     const timer = setTimeout(() => {
       document.addEventListener('mousedown', handleClickOutside);
     }, 100);
-    
+
     return () => {
       clearTimeout(timer);
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showHelp]);
-  
+
   // Captain's commentary quotes for game over
   const captainGameOverQuotes = [
     "... (hits cigar) That guy was epic.",
@@ -279,13 +279,13 @@ export const GameCanvas = () => {
     "... (shaking head) Truly built different..",
     "... (single tear) A legend cooked too soon",
   ];
-  
+
   // Captain's level-up quotes for dialog system
   const captainLevelUpQuotes = {
     level2: "They're gonna tell stories about ya, kid, hold [SPACE] to fire away",
     level3: "Here's some more firepower, cap'n"
   };
-  
+
   // Function to play random captain speech
   const playCaptainSpeech = useCallback(async () => {
     const speechSounds = ['speech1', 'speech2'];
@@ -296,26 +296,26 @@ export const GameCanvas = () => {
       console.error('Failed to play captain speech:', error);
     }
   }, [playSound]);
-  
+
   // Function to trigger captain level-up toast
   const triggerCaptainLevelUpDialog = useCallback((level: 'level2' | 'level3') => {
     // Clear any existing dialogs first to prevent overlay
     setShowCaptainDialog(false);
     setShowGameOverDialog(false);
-    
+
     const message = captainLevelUpQuotes[level];
     setLevelUpMessage(message);
     setShowLevelUpDialog(true);
     playCaptainSpeech(); // Play random captain speech
   }, [captainLevelUpQuotes, playCaptainSpeech]);
-  
+
   // Clear shield if health drops below 100%
   useEffect(() => {
     if (health < 3.0 && shield > 0) {
       setShield(0);
     }
   }, [health, shield]);
-  
+
   // Mobile touch event prevention - only on canvas during gameplay
   useEffect(() => {
     if (!isMobile || !canvasRef.current) return;
@@ -339,13 +339,13 @@ export const GameCanvas = () => {
       canvas.removeEventListener('touchend', preventTouch);
     };
   }, [isMobile, gameState]);
-   
-   // Mobile controls state
-   const [joystickInput, setJoystickInput] = useState({ x: 0, y: 0 });
-   const joystickInputRef = useRef({ x: 0, y: 0 }); // Ref to hold current joystick input
-   const [showJoystick, setShowJoystick] = useState(isMobile); // Show by default on mobile, hidden on desktop
 
-   // Handle joystick toggle from hamburger menu
+  // Mobile controls state
+  const [joystickInput, setJoystickInput] = useState({ x: 0, y: 0 });
+  const joystickInputRef = useRef({ x: 0, y: 0 }); // Ref to hold current joystick input
+  const [showJoystick, setShowJoystick] = useState(isMobile); // Show by default on mobile, hidden on desktop
+
+  // Handle joystick toggle from hamburger menu
   const handleToggleJoystick = useCallback(() => {
     setShowJoystick(prev => !prev);
   }, []);
@@ -365,20 +365,20 @@ export const GameCanvas = () => {
 
   const handleMainMenu = useCallback(() => {
     playMenuClose().catch(console.error);
-    
+
     // If in iframe, send message to parent to reload the game
     if (window.parent !== window) {
       window.parent.postMessage({
         type: 'game:reset',
       }, '*');
     }
-    
+
     setGameState("menu");
     setAudioGameState(GameState.MENU); // Update audio volume for menu
   }, [playMenuClose, setAudioGameState, GameState]);
 
-   // Handle joystick input with useCallback for stable reference
-   const handleJoystickInput = useCallback((input: { x: number; y: number }) => {
+  // Handle joystick input with useCallback for stable reference
+  const handleJoystickInput = useCallback((input: { x: number; y: number }) => {
     // Update both ref and state
     joystickInputRef.current = input;
     setJoystickInput(input);
@@ -397,10 +397,10 @@ export const GameCanvas = () => {
   }, []);
 
   // Log when joystickInput state actually changes
-   useEffect(() => {
-     console.log('🔄 joystickInput state CHANGED to:', JSON.stringify(joystickInput));
-   }, [joystickInput]);
-  
+  useEffect(() => {
+    console.log('🔄 joystickInput state CHANGED to:', JSON.stringify(joystickInput));
+  }, [joystickInput]);
+
   // === REFACTORED: getStarValue and awardPoints now in GameEngine ===
   // All scoring logic including combo tracking is handled by the engine
 
@@ -408,7 +408,7 @@ export const GameCanvas = () => {
   const takeDamage = (damageAmount: number) => {
     // Play ship hit sound whenever damage is taken
     playSound('shipHit').catch(console.error);
-    
+
     // Shield only works when health is at 100% (3.0)
     if (shield > 0 && health >= 3.0) {
       // Shield taking damage - no sound here, sound plays when becoming vulnerable
@@ -425,20 +425,20 @@ export const GameCanvas = () => {
                 // Clear any existing dialogs first to prevent overlay
                 setShowCaptainDialog(false);
                 setShowLevelUpDialog(false);
-                
+
                 const randomQuote = captainGameOverQuotes[Math.floor(Math.random() * captainGameOverQuotes.length)];
                 setGameOverMessage(randomQuote);
                 setShowGameOverDialog(true);
                 playCaptainSpeech(); // Play random captain speech
               }, 1700);
-              
+
               setGameState("gameover");
               setAudioGameState(GameState.GAME_OVER); // Update audio volume for game over
               toastManager.clearQueue(); // Clear all pending toasts when game over
               AudioManager.getInstance().stopShipEngineLoops(); // Stop ship engine loops on game over
               playMenuOpen().catch(console.error); // Play menu open sound when game over screen appears
               playSound('gameOver').catch(console.error);
-              
+
               if (score > highScore) {
                 setPreviousHighScore(highScore); // Capture previous high score before updating
                 setHighScore(score);
@@ -460,49 +460,49 @@ export const GameCanvas = () => {
       // If health drops below 100%, clear any remaining shield
       setHealth(prev => {
         const newHealth = prev - damageAmount;
-        
+
         // Clear shield if health drops below max
         if (newHealth < 3.0 && shield > 0) {
           setShield(0);
         }
-        
+
         if (newHealth <= 0) {
-              // Delay captain's commentary by 1700ms when player dies
-              setTimeout(() => {
-                // Clear any existing dialogs first to prevent overlay
-                setShowCaptainDialog(false);
-                setShowLevelUpDialog(false);
-                
-                const randomQuote = captainGameOverQuotes[Math.floor(Math.random() * captainGameOverQuotes.length)];
-                setGameOverMessage(randomQuote);
-                setShowGameOverDialog(true);
-                playCaptainSpeech(); // Play random captain speech
-              }, 1700);
-              
-              setGameState("gameover");
-              setAudioGameState(GameState.GAME_OVER); // Update audio volume for game over
-              toastManager.clearQueue(); // Clear all pending toasts when game over
-              AudioManager.getInstance().stopShipEngineLoops(); // Stop ship engine loops on game over
-              playMenuOpen().catch(console.error); // Play menu open sound when game over screen appears
-              playSound('gameOver').catch(console.error);
-              
-              if (score > highScore) {
-                setHighScore(score);
-                localStorage.setItem("orbitalHighScore", score.toString());
-                priorityToast("New High Score!", 0, {
-                  duration: 4000,
-                  className: "bg-gradient-to-r from-blue-400 to-blue-600 text-white font-bold font-sans"
-                });
-              }
-            }
+          // Delay captain's commentary by 1700ms when player dies
+          setTimeout(() => {
+            // Clear any existing dialogs first to prevent overlay
+            setShowCaptainDialog(false);
+            setShowLevelUpDialog(false);
+
+            const randomQuote = captainGameOverQuotes[Math.floor(Math.random() * captainGameOverQuotes.length)];
+            setGameOverMessage(randomQuote);
+            setShowGameOverDialog(true);
+            playCaptainSpeech(); // Play random captain speech
+          }, 1700);
+
+          setGameState("gameover");
+          setAudioGameState(GameState.GAME_OVER); // Update audio volume for game over
+          toastManager.clearQueue(); // Clear all pending toasts when game over
+          AudioManager.getInstance().stopShipEngineLoops(); // Stop ship engine loops on game over
+          playMenuOpen().catch(console.error); // Play menu open sound when game over screen appears
+          playSound('gameOver').catch(console.error);
+
+          if (score > highScore) {
+            setHighScore(score);
+            localStorage.setItem("orbitalHighScore", score.toString());
+            priorityToast("New High Score!", 0, {
+              duration: 4000,
+              className: "bg-gradient-to-r from-blue-400 to-blue-600 text-white font-bold font-sans"
+            });
+          }
+        }
         return Math.max(0, newHealth);
       });
     }
   };
-  
+
   // Scale factor ref for resolution-based scaling (1920x1080 as reference)
   const scaleFactorRef = useRef(1.0);
-  
+
   const gameRef = useRef({
     ship: { x: 0, y: 0, vx: 0, vy: 0, radius: 31, angle: 0 }, // Base size, will be scaled by scaleFactor
     planets: [] as Planet[],
@@ -534,7 +534,7 @@ export const GameCanvas = () => {
 
   // GameEngine instance for testing particle updates
   const engineRef = useRef<GameEngine | null>(null);
-  
+
   // Renderer instance for handling all canvas drawing
   const rendererRef = useRef<Renderer | null>(null);
 
@@ -616,7 +616,7 @@ export const GameCanvas = () => {
       paused: GameState.PAUSED,
       gameover: GameState.GAME_OVER
     };
-    
+
     setAudioGameState(audioGameStateMap[gameState]);
   }, [gameState, setAudioGameState, GameState]);
 
@@ -665,32 +665,32 @@ export const GameCanvas = () => {
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d")!;
-    
+
     // === FIXED INTERNAL RESOLUTION SYSTEM ===
     // Canvas ALWAYS runs at 1920x1080 internally for perfect 1:1 gameplay
     // CSS handles scaling to fit any screen size
     const INTERNAL_WIDTH = 1920;
     const INTERNAL_HEIGHT = 1080;
-    
+
     // Lock canvas to fixed internal resolution
     canvas.width = INTERNAL_WIDTH;
     canvas.height = INTERNAL_HEIGHT;
-    
+
     // Calculate display size (for CSS scaling later)
     // When embedded in iframe, reduce size significantly to ensure bottom notifications are visible
     const isInIframe = window.self !== window.top;
     const UI_BOTTOM_SPACE = isMobile && !isInIframe ? 300 : 0; // Only reserve space when standalone mobile
-    
+
     const availableWidth = isInIframe ? window.innerWidth * 0.96 : window.innerWidth;
-    const availableHeight = isInIframe 
+    const availableHeight = isInIframe
       ? window.innerHeight * 0.88  // Reduce by 12% to ensure bottom notification area is visible
       : (isMobile ? window.innerHeight * 0.98 : window.innerHeight) - UI_BOTTOM_SPACE;
-    
+
     const aspectRatio = INTERNAL_WIDTH / INTERNAL_HEIGHT; // 16:9
-    
+
     let displayWidth: number;
     let displayHeight: number;
-    
+
     if (availableWidth / availableHeight > aspectRatio) {
       // Screen wider than 16:9 - constrain by height
       displayHeight = availableHeight;
@@ -700,12 +700,12 @@ export const GameCanvas = () => {
       displayWidth = availableWidth;
       displayHeight = displayWidth / aspectRatio;
     }
-    
+
     // Store display dimensions for CSS scaling
     canvas.style.width = `${displayWidth}px`;
     canvas.style.height = `${displayHeight}px`;
     canvas.style.imageRendering = 'auto'; // Smooth scaling
-    
+
     // Scale factor is always 1.0 (no asset scaling needed)
     scaleFactorRef.current = 1.0;
 
@@ -803,26 +803,26 @@ export const GameCanvas = () => {
           onHealthWrenchCollected: (x: number, y: number) => {
             // Health wrench collection - handles complex health/shield restoration
             playSound('healthWrench');
-            
+
             // Track repairs for achievement
             setTotalRepairs(prev => {
               const newTotal = prev + 1;
               localStorage.setItem("totalRepairs", newTotal.toString());
               return newTotal;
             });
-            
+
             // Award points
             setScore(prev => prev + 150);
-            
+
             // Show pickup notification
             showPickupNotification(
               "🔧 Repairs +150 pts",
               'bg-gradient-to-r from-green-400 to-emerald-500 text-slate-900 font-bold shadow-lg'
             );
-            
+
             // Trigger health glow
             healthGlowEndTimeRef.current = Date.now() + 1000;
-            
+
             // Health restoration with overflow to shield
             // Note: Particles are created by the engine, not here
             const healAmount = 0.75; // 25% health
@@ -835,11 +835,11 @@ export const GameCanvas = () => {
                 // Add to health first
                 const healthToAdd = Math.min(healAmount, 3.0 - prevHealth);
                 const overflow = healAmount - healthToAdd;
-                
+
                 if (overflow > 0) {
                   setShield(prev => Math.min(3.0, prev + overflow));
                 }
-                
+
                 return prevHealth + healthToAdd;
               }
             });
@@ -851,8 +851,8 @@ export const GameCanvas = () => {
             ammoRef.current = 100; // Update ref immediately
             setAmmo(100);
             setIsRecharging(false);
-            playSound('unlimitedAmmo').catch(() => {});
-            
+            playSound('unlimitedAmmo').catch(() => { });
+
             setScore(prev => prev + 500);
             showPickupNotification(
               "∞ Unlimited Ammo! +500 pts",
@@ -861,13 +861,13 @@ export const GameCanvas = () => {
           },
           onVoidWipeCollected: (x: number, y: number) => {
             // Void Wipe power-up collection - clears all obstacles
-            playSound('voidWipe').catch(() => {});
+            playSound('voidWipe').catch(() => { });
             setScore(prev => prev + 1000);
             showPickupNotification(
               "💜 VOID WIPE! +1000 pts",
               'bg-gradient-to-r from-purple-500 to-violet-600 text-white font-bold shadow-2xl'
             );
-            
+
             // Particles handled by caller
           },
           onShotFired: () => {
@@ -877,14 +877,14 @@ export const GameCanvas = () => {
               localStorage.setItem("totalShotsFired", newTotal.toString());
               return newTotal;
             });
-            
+
             // Update last shot time to prevent passive regen from triggering too soon
             lastShotTimeRef.current = Date.now();
           },
         }
       );
     }
-    
+
     // Initialize Renderer
     if (!rendererRef.current) {
       rendererRef.current = new Renderer();
@@ -923,17 +923,17 @@ export const GameCanvas = () => {
       // When embedded in iframe, reduce size significantly to ensure bottom notifications are visible
       const isInIframe = window.self !== window.top;
       const UI_BOTTOM_SPACE = isMobile && !isInIframe ? 300 : 0; // Only add UI space when standalone mobile
-      
+
       const availableWidth = isInIframe ? window.innerWidth * 0.96 : window.innerWidth;
-      const availableHeight = isInIframe 
+      const availableHeight = isInIframe
         ? window.innerHeight * 0.88  // Reduce by 12% to ensure bottom notification area is visible
         : (isMobile ? window.innerHeight * 0.98 : window.innerHeight) - UI_BOTTOM_SPACE;
-      
+
       const aspectRatio = INTERNAL_WIDTH / INTERNAL_HEIGHT;
-      
+
       let displayWidth: number;
       let displayHeight: number;
-      
+
       if (availableWidth / availableHeight > aspectRatio) {
         displayHeight = availableHeight;
         displayWidth = displayHeight * aspectRatio;
@@ -941,11 +941,11 @@ export const GameCanvas = () => {
         displayWidth = availableWidth;
         displayHeight = displayWidth / aspectRatio;
       }
-      
+
       // Update CSS display dimensions
       canvas.style.width = `${displayWidth}px`;
       canvas.style.height = `${displayHeight}px`;
-      
+
       // Internal canvas dimensions remain fixed at 1920x1080
       // No need to update ship radius, StarField, or Renderer
     };
@@ -955,19 +955,28 @@ export const GameCanvas = () => {
         handleToggleJoystick();
         return; // Don't process this key further
       }
-      
+
       if (e.key === 'm' || e.key === 'M') {
         toggleMute();
         return; // Don't process this key further
       }
-      
+
       // Close help popup with Escape if it's showing
       if (e.key === "Escape" && showHelp) {
         e.preventDefault();
         setShowHelp(false);
         return;
       }
-      
+
+      // Prevent default browser behavior for gameplay keys during gameplay
+      // This prevents spacebar from scrolling the page, arrow keys from scrolling, etc.
+      if (gameState === "playing") {
+        const gameplayKeys = [' ', 'w', 'a', 's', 'd', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+        if (gameplayKeys.includes(e.key)) {
+          e.preventDefault();
+        }
+      }
+
       game.keys[e.key.toLowerCase()] = true;
       if (e.key === "Escape" && gameState === "playing") {
         e.preventDefault();
@@ -1038,26 +1047,26 @@ export const GameCanvas = () => {
       createParticles(x, y, "hsl(0, 100%, 70%)", 25);
       createParticles(x, y, "hsl(30, 100%, 80%)", 20);
       createParticles(x, y, "hsl(60, 100%, 90%)", 15);
-      
+
       // Apply blast force to nearby obstacles
       game.planets.forEach((planet, index) => {
         if (excludeIndices.includes(index)) return;
-        
+
         const dx = planet.x - x;
         const dy = planet.y - y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        
+
         if (dist < blastRadius && dist > 0) {
           const normalX = dx / dist;
           const normalY = dy / dist;
           const blastForce = force * (1 - dist / blastRadius); // Force decreases with distance
-          
+
           planet.vx += normalX * blastForce;
           planet.vy += normalY * blastForce;
-          
+
           // Create impact particles on affected obstacles
           createParticles(planet.x, planet.y, "hsl(45, 100%, 60%)", 5);
-          
+
           // Chain reaction: if it's a meteor or debris, it might explode too
           if ((planet.type === "meteor" || planet.type === "debris") && blastForce > 1.5) {
             setTimeout(() => {
@@ -1086,7 +1095,7 @@ export const GameCanvas = () => {
       const now = Date.now();
       const delta = (now - lastTime) / 16.67;
       lastTime = now;
-      
+
       // Update toast threshold based on current score to reduce notification spam in late game
       toastManager.updateThreshold(score);
 
@@ -1095,12 +1104,12 @@ export const GameCanvas = () => {
       if (engineRef.current) {
         engineRef.current.updateInput({ keys: game.keys });
       }
-      
+
       // Process all input (keyboard + joystick) and apply ship thrust
-      const isAccelerating = engineRef.current 
+      const isAccelerating = engineRef.current
         ? engineRef.current.processInput(joystickInputRef.current, isMobile)
         : false;
-      
+
       // Sync ship velocity from engine after input processing
       if (engineRef.current) {
         const engineState = engineRef.current.getState();
@@ -1123,7 +1132,7 @@ export const GameCanvas = () => {
           ammoRef.current, // Use ref for immediate value (prevents stale state)
           rechargeStartTimeRef
         );
-        
+
         // Sync bullets from engine after shooting
         const engineState = engineRef.current.getState();
         game.bullets = engineState.bullets;
@@ -1137,7 +1146,7 @@ export const GameCanvas = () => {
           ammoRef.current = maxAmmo;
           setAmmo(maxAmmo); // Recharge to full (100 or 200)
           setIsRecharging(false);
-          playSound('chargeReady').catch(() => {}); // Ammo ready sound
+          playSound('chargeReady').catch(() => { }); // Ammo ready sound
         } else {
           const newAmmo = rechargeProgress * maxAmmo;
           ammoRef.current = newAmmo;
@@ -1149,7 +1158,7 @@ export const GameCanvas = () => {
       else if (!isUnlimitedAmmo && ammo < maxAmmo && ammo > 0) {
         const timeSinceLastShot = Date.now() - lastShotTimeRef.current;
         const PASSIVE_REGEN_COOLDOWN = 2000; // 2 second cooldown before passive regen starts
-        
+
         if (timeSinceLastShot >= PASSIVE_REGEN_COOLDOWN) {
           // Regenerate 0.25 ammo per frame (~15 per second at 60 FPS)
           const newAmmo = Math.min(maxAmmo, ammoRef.current + 0.25);
@@ -1171,10 +1180,10 @@ export const GameCanvas = () => {
         // Update engine with current score/difficulty for spawning calculations
         const currentDifficulty = 1 + score * 0.001;
         engineRef.current.setScoreAndDifficulty(score, currentDifficulty);
-        
+
         // Run ALL game logic in engine (physics, collisions, spawning, etc.)
         engineRef.current.update(delta);
-        
+
         // Sync ALL game state from engine back to GameCanvas
         const engineState = engineRef.current.getState();
         game.ship = engineState.ship;
@@ -1205,12 +1214,12 @@ export const GameCanvas = () => {
           (Math.random() - 0.5) * game.shake
         );
       }
-      
+
       // Render all game objects
       if (rendererRef.current) {
-        rendererRef.current.render(ctx, game, { 
-          delta, 
-          isUnlimitedAmmo, 
+        rendererRef.current.render(ctx, game, {
+          delta,
+          isUnlimitedAmmo,
           score,
           health,
           shield,
@@ -1218,7 +1227,7 @@ export const GameCanvas = () => {
           healthGlowEndTimeRef: healthGlowEndTimeRef.current
         });
       }
-      
+
       // Restore context if shake was applied
       if (game.shake > 0) {
         ctx.restore();
@@ -1234,26 +1243,26 @@ export const GameCanvas = () => {
 
       // Check for difficulty advancement (UI notifications only)
       const difficultyManager = difficultyManagerRef.current;
-      
+
       // Check for auto-difficulty advancement
       const autoAdvance = difficultyManager.checkAutoAdvance(score);
       if (autoAdvance.shouldAdvance && autoAdvance.newDifficulty) {
         difficultyManager.autoAdvance(autoAdvance.newDifficulty);
         setCurrentDifficulty(autoAdvance.newDifficulty);
         const newConfig = difficultyManager.getCurrentConfig();
-        priorityToast(`Difficulty increased to ${newConfig.displayName}!`, 50, { 
-          duration: 3000, 
-          className: 'bg-blue-500/90 text-white' 
+        priorityToast(`Difficulty increased to ${newConfig.displayName}!`, 50, {
+          duration: 3000,
+          className: 'bg-blue-500/90 text-white'
         });
       }
-      
+
       // === NOTE: All spawning (planets, stars, health, ammo, void wipes) is now handled by GameEngine.updateSpawning() ===
       // The engine automatically spawns entities based on difficulty and timing
 
       // Ship upgrade checks (must run every frame for hasWeapon to update correctly)
       const isUpgradedToShip2 = score >= 1500;
       const isUpgradedToShip3 = score >= 12500;
-      
+
       // Use refs to prevent duplicate triggers due to async state updates (fixes audio race condition)
       if (isUpgradedToShip2 && !hasUpgradedRef.current) {
         hasUpgradedRef.current = true; // Set ref IMMEDIATELY to prevent duplicate triggers
@@ -1264,12 +1273,12 @@ export const GameCanvas = () => {
         setIsRecharging(false);
         playSound('shipUpgrades');
         triggerCaptainLevelUpDialog('level2');
-        
+
         // Show help popup with only shooting instruction after captain dialog dismisses
         setTimeout(() => {
           setHelpFilter('shoot'); // Filter to show only shooting line
           setShowHelp(true);
-          
+
           // Auto-dismiss after 5 seconds
           setTimeout(() => {
             setShowHelp(false);
@@ -1277,7 +1286,7 @@ export const GameCanvas = () => {
           }, 5000);
         }, 3500); // Wait for captain dialog (3s) + small delay
       }
-      
+
       if (isUpgradedToShip3 && !hasUpgradedToShip3Ref.current) {
         hasUpgradedToShip3Ref.current = true; // Set ref IMMEDIATELY to prevent duplicate triggers
         setHasUpgradedToShip3(true);
@@ -1310,11 +1319,11 @@ export const GameCanvas = () => {
     setHasUpgradedToShip3(false); // Reset ship level 3 state
     hasUpgradedRef.current = false; // Reset upgrade ref for new game
     hasUpgradedToShip3Ref.current = false; // Reset upgrade ref for new game
-    
+
     // Only reset difficulty to medium if no manual difficulty has been set
     const difficultyManager = difficultyManagerRef.current;
     const currentDiff = difficultyManager.getCurrentDifficulty();
-    
+
     // Check if this is a fresh start (no manual override) - only then reset to medium
     if (!difficultyManager.isManuallySet()) {
       difficultyManager.setDifficulty('medium', false);
@@ -1323,17 +1332,17 @@ export const GameCanvas = () => {
       // Keep the manually set difficulty
       setCurrentDifficulty(currentDiff);
     }
-    
+
     // Clear any existing dialogs first to prevent overlay
     setShowGameOverDialog(false);
     setShowLevelUpDialog(false);
-    
+
     // Show captain dialog at game start
     setShowCaptainDialog(true);
     toastManager.clearQueue(); // Clear any pending toast notifications immediately when captain dialog appears
     toastManager.updateThreshold(0); // Reset toast threshold for new game
     playCaptainSpeech(); // Play captain speech when dialog appears
-    
+
     // Ensure audio starts when user interacts with the game
     try {
       await startThemeMusic();
@@ -1342,7 +1351,7 @@ export const GameCanvas = () => {
     } catch (error) {
       console.log('Audio initialization failed:', error);
     }
-    
+
     const game = gameRef.current;
     game.gameStartTime = Date.now(); // Initialize game start time
     game.ship.x = canvasRef.current!.width / 2;
@@ -1362,25 +1371,25 @@ export const GameCanvas = () => {
     game.nearMissTracker.clear(); // Clear near-miss tracking for new game
     game.planetIdCounter = 0; // Reset planet ID counter
     game.lastVoidWipeCollected = 0; // Reset respite period
-    
+
     // Reset shooting state
     ammoRef.current = maxAmmo; // Reset ref for immediate tracking
     setAmmo(maxAmmo); // Start with full ammo (100 or 200 based on level)
     setIsRecharging(false);
     setIsUnlimitedAmmo(false);
-    
+
     // Reset visual effects
     healthGlowEndTimeRef.current = 0;
-    
+
     // Reset combo tracking
     game.comboCount = 0;
     game.lastComboTime = 0;
   };
 
   return (
-    <div 
+    <div
       className="relative w-screen h-screen overflow-hidden bg-slate-900"
-      style={{ 
+      style={{
         touchAction: isMobile ? 'none' : 'auto',
         userSelect: 'none',
         WebkitUserSelect: 'none'
@@ -1422,7 +1431,7 @@ export const GameCanvas = () => {
               playMenuOpen={playMenuOpen}
             />
           )}
-          
+
           {/* Canvas Container */}
           <div className="border-2 border-primary/30 rounded-lg overflow-hidden shadow-2xl">
             <canvas ref={canvasRef} className="block" />
@@ -1480,13 +1489,13 @@ export const GameCanvas = () => {
           shotsFired={totalShotsFired}
         />
       )}
-      
+
       {/* Virtual Joystick - Visible on mobile or when toggled on desktop */}
       <VirtualJoystick
         onMove={handleJoystickInput}
         isVisible={gameState === "playing" && (isMobile || showJoystick)}
       />
-      
+
       {/* Floating Help Button - Desktop only, bottom right */}
       {gameState === "playing" && !isMobile && (
         <button
@@ -1500,13 +1509,13 @@ export const GameCanvas = () => {
           ?
         </button>
       )}
-      
+
       {/* Captain Dialog */}
       <CaptainDialog
         isVisible={showCaptainDialog}
         onComplete={handleCaptainDialogComplete}
       />
-      
+
       {/* Level Up Captain Dialog */}
       <CaptainDialog
         isVisible={showLevelUpDialog}
