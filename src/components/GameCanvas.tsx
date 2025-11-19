@@ -1320,6 +1320,11 @@ export const GameCanvas = () => {
     hasUpgradedRef.current = false; // Reset upgrade ref for new game
     hasUpgradedToShip3Ref.current = false; // Reset upgrade ref for new game
 
+    // Reset Game Engine state
+    if (engineRef.current) {
+      engineRef.current.reset();
+    }
+
     // Only reset difficulty to medium if no manual difficulty has been set
     const difficultyManager = difficultyManagerRef.current;
     const currentDiff = difficultyManager.getCurrentDifficulty();
@@ -1385,6 +1390,10 @@ export const GameCanvas = () => {
     game.comboCount = 0;
     game.lastComboTime = 0;
   };
+
+  const handlePlayAgain = useCallback(() => {
+    startGame();
+  }, [startGame]);
 
   return (
     <div
@@ -1475,7 +1484,7 @@ export const GameCanvas = () => {
           score={score}
           highScore={highScore}
           previousHighScore={previousHighScore}
-          onPlayAgain={startGame}
+          onPlayAgain={handlePlayAgain}
           onMainMenu={handleMainMenu}
           showJoystick={showJoystick}
           onToggleJoystick={() => setShowJoystick(!showJoystick)}
