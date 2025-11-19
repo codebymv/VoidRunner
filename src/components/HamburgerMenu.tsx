@@ -11,7 +11,7 @@ interface HamburgerMenuProps {
   currentDifficulty: DifficultyLevel;
   onDifficultyChange: (difficulty: DifficultyLevel) => void;
   onShowStats?: () => void;
-  highScore: number; // For checking hard difficulty unlock
+  highScore: number; // Effective high score (includes portal DB value)
 }
 
 export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({ 

@@ -7,7 +7,7 @@ import { ControlsCard } from "./ControlsCard";
 
 interface MainMenuProps {
   onStartGame: () => void;
-  highScore: number;
+  highScore: number; // Effective high score (may include portal DB value)
   currentDifficulty: DifficultyLevel;
   onDifficultyChange: (difficulty: DifficultyLevel) => void;
   isMobile: boolean;

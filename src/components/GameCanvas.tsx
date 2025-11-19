@@ -134,8 +134,11 @@ export const GameCanvas = () => {
   const starFieldRef = useRef<StarField | null>(null);
   const [gameState, setGameState] = useState<"menu" | "playing" | "paused" | "gameover">("menu");
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(() => parseInt(localStorage.getItem("orbitalHighScore") || "0"));
-  const [previousHighScore, setPreviousHighScore] = useState(() => parseInt(localStorage.getItem("orbitalHighScore") || "0")); // Track previous high score for display
+  // Local session high score (used for in-game toasts, etc.)
+  const [highScore, setHighScore] = useState(0);
+  const [previousHighScore, setPreviousHighScore] = useState(0); // Track previous high score for display
+  // High score as reported by the FlashCore portal/database
+  const [portalHighScore, setPortalHighScore] = useState(0);
   
   // Achievement stat tracking
   const [totalNearMisses, setTotalNearMisses] = useState(() => parseInt(localStorage.getItem("totalNearMisses") || "0"));
@@ -206,19 +209,45 @@ export const GameCanvas = () => {
   const difficultyManagerRef = useRef<DifficultyManager>(new DifficultyManager('medium'));
   const [currentDifficulty, setCurrentDifficulty] = useState<DifficultyLevel>('medium');
   
-  // Auto-switch from hard difficulty if not unlocked
+  // Auto-switch from hard difficulty if not unlocked.
+  // Uses the max of local and portal high scores so unlocks follow the database.
   useEffect(() => {
-    if (currentDifficulty === 'hard' && highScore < 12500) {
+    const effectiveHighScore = Math.max(highScore, portalHighScore);
+    if (currentDifficulty === 'hard' && effectiveHighScore < 12500) {
       const difficultyManager = difficultyManagerRef.current;
       difficultyManager.setDifficulty('medium', true);
       setCurrentDifficulty('medium');
     }
-  }, [currentDifficulty, highScore]);
+  }, [currentDifficulty, highScore, portalHighScore]);
   
-  // Send stats to parent window (FlashCore portal) whenever they change
+  // Send stats to parent window (FlashCore portal) only on game over
+  // This prevents overwriting DB scores on initial load
   useEffect(() => {
-    sendStatsToParent(highScore, totalNearMisses, totalRepairs, totalShotsFired);
-  }, [highScore, totalNearMisses, totalRepairs, totalShotsFired, sendStatsToParent]);
+    if (gameState === 'gameover' && score > 0) {
+      // Send current session score (not localStorage highScore)
+      sendStatsToParent(score, totalNearMisses, totalRepairs, totalShotsFired);
+    }
+  }, [gameState, score, totalNearMisses, totalRepairs, totalShotsFired, sendStatsToParent]);
+  
+  // Listen for stats coming from the FlashCore portal (database-backed stats)
+  useEffect(() => {
+    const handlePortalMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'portal:stats') {
+        const { highScore: portalHS, achievementsUnlocked, achievementsTotal } = event.data;
+        const portalValue = typeof portalHS === 'number' ? portalHS : 0;
+        setPortalHighScore(portalValue || 0);
+        const stats = {
+          highScore: portalValue || 0,
+          achievementsUnlocked,
+          achievementsTotal,
+          hardUnlocked: (portalValue || 0) >= 12500,
+        };
+        console.log('[VoidRunner] 📊 Received portal stats:', JSON.stringify(stats, null, 2));
+      }
+    };
+    window.addEventListener('message', handlePortalMessage);
+    return () => window.removeEventListener('message', handlePortalMessage);
+  }, []);
   
   // Close help popup when clicking outside
   useEffect(() => {
@@ -1365,7 +1394,7 @@ export const GameCanvas = () => {
           {gameState === "playing" && (
             <GameHUD
               score={score}
-              highScore={highScore}
+              highScore={Math.max(highScore, portalHighScore)}
               health={health}
               shield={shield}
               ammo={ammo}
@@ -1404,7 +1433,7 @@ export const GameCanvas = () => {
       {gameState === "menu" && (
         <MainMenu
           onStartGame={startGame}
-          highScore={highScore}
+          highScore={Math.max(highScore, portalHighScore)}
           currentDifficulty={currentDifficulty}
           onDifficultyChange={handleDifficultyChange}
           isMobile={isMobile}
