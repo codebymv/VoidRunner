@@ -336,6 +336,14 @@ export const GameCanvas = () => {
 
   const handleMainMenu = useCallback(() => {
     playMenuClose().catch(console.error);
+    
+    // If in iframe, send message to parent to reload the game
+    if (window.parent !== window) {
+      window.parent.postMessage({
+        type: 'game:reset',
+      }, '*');
+    }
+    
     setGameState("menu");
     setAudioGameState(GameState.MENU); // Update audio volume for menu
   }, [playMenuClose, setAudioGameState, GameState]);
@@ -640,10 +648,15 @@ export const GameCanvas = () => {
     canvas.height = INTERNAL_HEIGHT;
     
     // Calculate display size (for CSS scaling later)
-    // Reserve space at bottom for UI elements (joystick, notifications, help button, captain dialog)
-    const UI_BOTTOM_SPACE = isMobile ? 300 : 180; // Space for joystick (120px) + notifications + dialogs + breathing room
-    const availableWidth = window.innerWidth;
-    const availableHeight = (isMobile ? window.innerHeight * 0.98 : window.innerHeight) - UI_BOTTOM_SPACE;
+    // When embedded in iframe, reduce size significantly to ensure bottom notifications are visible
+    const isInIframe = window.self !== window.top;
+    const UI_BOTTOM_SPACE = isMobile && !isInIframe ? 300 : 0; // Only reserve space when standalone mobile
+    
+    const availableWidth = isInIframe ? window.innerWidth * 0.96 : window.innerWidth;
+    const availableHeight = isInIframe 
+      ? window.innerHeight * 0.88  // Reduce by 12% to ensure bottom notification area is visible
+      : (isMobile ? window.innerHeight * 0.98 : window.innerHeight) - UI_BOTTOM_SPACE;
+    
     const aspectRatio = INTERNAL_WIDTH / INTERNAL_HEIGHT; // 16:9
     
     let displayWidth: number;
@@ -878,10 +891,15 @@ export const GameCanvas = () => {
 
     const handleResize = () => {
       // Recalculate CSS display size only (internal resolution stays 1920x1080)
-      // Reserve space at bottom for UI elements (joystick, notifications, help button, captain dialog)
-      const UI_BOTTOM_SPACE = isMobile ? 300 : 180; // Space for joystick (120px) + notifications + dialogs + breathing room
-      const availableWidth = window.innerWidth;
-      const availableHeight = (isMobile ? window.innerHeight * 0.98 : window.innerHeight) - UI_BOTTOM_SPACE;
+      // When embedded in iframe, reduce size significantly to ensure bottom notifications are visible
+      const isInIframe = window.self !== window.top;
+      const UI_BOTTOM_SPACE = isMobile && !isInIframe ? 300 : 0; // Only add UI space when standalone mobile
+      
+      const availableWidth = isInIframe ? window.innerWidth * 0.96 : window.innerWidth;
+      const availableHeight = isInIframe 
+        ? window.innerHeight * 0.88  // Reduce by 12% to ensure bottom notification area is visible
+        : (isMobile ? window.innerHeight * 0.98 : window.innerHeight) - UI_BOTTOM_SPACE;
+      
       const aspectRatio = INTERNAL_WIDTH / INTERNAL_HEIGHT;
       
       let displayWidth: number;
