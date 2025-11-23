@@ -136,7 +136,7 @@ export const GameCanvas = () => {
   const [score, setScore] = useState(0);
   // Local session high score (used for in-game toasts, etc.)
   const [highScore, setHighScore] = useState(0);
-  const [previousHighScore, setPreviousHighScore] = useState(0); // Track previous high score for display
+  const [previousHighScore, setPreviousHighScore] = useState(() => parseInt(localStorage.getItem("orbitalHighScore") || "0")); // Track previous high score for display (initialized from localStorage)
   // High score as reported by the FlashCore portal/database
   const [portalHighScore, setPortalHighScore] = useState(0);
 
@@ -236,6 +236,10 @@ export const GameCanvas = () => {
         const { highScore: portalHS, achievementsUnlocked, achievementsTotal } = event.data;
         const portalValue = typeof portalHS === 'number' ? portalHS : 0;
         setPortalHighScore(portalValue || 0);
+        // Set previous high score to the portal value (database high score at session start)
+        setPreviousHighScore(portalValue || 0);
+        // Initialize local high score from portal to avoid conflicts
+        setHighScore(portalValue || 0);
         const stats = {
           highScore: portalValue || 0,
           achievementsUnlocked,
