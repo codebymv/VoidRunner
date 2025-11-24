@@ -1,5 +1,5 @@
 import React from 'react';
-import talk1 from '../assets/talk1.png';
+import talk1 from '../assets/talk1.webp';
 
 interface CaptainCommentaryProps {
   message: string;

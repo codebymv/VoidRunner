@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import talk1 from '../assets/talk1.png';
-import talk2 from '../assets/talk2.png';
+import talk1 from '../assets/talk1.webp';
+import talk2 from '../assets/talk2.webp';
 
 interface CaptainDialogProps {
   isVisible: boolean;

@@ -5,7 +5,7 @@ import { ShieldBar } from './ShieldBar';
 import { AmmoBar } from './AmmoBar';
 import { ScoreDisplay } from './ScoreDisplay';
 import { DifficultyLevel } from '@/utils/difficultyConfig';
-import logoImage from '@/assets/logo.png';
+import logoImage from '@/assets/logo.webp';
 
 interface GameHUDProps {
   score: number;

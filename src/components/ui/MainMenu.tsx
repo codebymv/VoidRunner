@@ -1,6 +1,6 @@
 import { Button } from "./button";
 import { DifficultyLevel } from "@/utils/difficultyConfig";
-import logoImage from "@/assets/logo.png";
+import logoImage from "@/assets/logo.webp";
 import { AchievementCarousel } from "../AchievementCarousel";
 import { DifficultySelector } from "./DifficultySelector";
 import { ControlsCard } from "./ControlsCard";

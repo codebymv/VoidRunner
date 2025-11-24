@@ -1,10 +1,10 @@
 import { Button } from "./button";
 import { HamburgerMenu } from "../HamburgerMenu";
 import { ControlsCard } from "./ControlsCard";
-import logoImage from "../../assets/logo.png";
-import redCrossSprite from "../../assets/red_cross.png";
+import logoImage from "../../assets/logo.webp";
+import redCrossSprite from "../../assets/red_cross.webp";
 import shieldSprite from "../../assets/shield.svg";
-import unlimitedAmmoImage from '../../assets/unlimited_ammo.png';
+import unlimitedAmmoImage from '../../assets/unlimited_ammo.webp';
 import { AudioManager } from "../../audio/AudioManager";
 
 interface GameHUDProps {

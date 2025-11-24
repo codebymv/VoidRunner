@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
-import trophyImage from '../assets/trophy.png';
+import trophyImage from '../assets/trophy.webp';
 
 export interface Achievement {
   id: string;

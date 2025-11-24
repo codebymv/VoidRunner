@@ -1,20 +1,20 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
-import shipIdleSprite from '@/assets/ship-idle.png';
-import shipThrustSprite from '@/assets/ship-thrust.png';
-import ship2IdleSprite from '@/assets/ship2-idle.png';
-import ship2ThrustSprite from '@/assets/ship2-thrust.png';
-import ship3IdleSprite from '@/assets/ship3-idle.png';
-import ship3ThrustSprite from '@/assets/ship3-thrust.png';
-import meteorSprite from '@/assets/meteor1.png';
-import planet2Sprite from '@/assets/planet2.png';
-import blackholeSprite from '@/assets/blackhole3.png';
-import debrisSprite from '@/assets/debris4.png';
-import scrapSprite from '@/assets/debris_scrap.png';
-import starSprite from '@/assets/star.png';
-import starUpgradeSprite from '@/assets/star_upgrade.png';
-import starUpgrade2Sprite from '@/assets/star_upgrade2.png';
-import healthWrenchSprite from '@/assets/health_wrench.png';
-import unlimitedAmmoSprite from '@/assets/unlimited_ammo.png';
+import shipIdleSprite from '@/assets/ship-idle.webp';
+import shipThrustSprite from '@/assets/ship-thrust.webp';
+import ship2IdleSprite from '@/assets/ship2-idle.webp';
+import ship2ThrustSprite from '@/assets/ship2-thrust.webp';
+import ship3IdleSprite from '@/assets/ship3-idle.webp';
+import ship3ThrustSprite from '@/assets/ship3-thrust.webp';
+import meteorSprite from '@/assets/meteor1.webp';
+import planet2Sprite from '@/assets/planet2.webp';
+import blackholeSprite from '@/assets/blackhole3.webp';
+import debrisSprite from '@/assets/debris4.webp';
+import scrapSprite from '@/assets/debris_scrap.webp';
+import starSprite from '@/assets/star.webp';
+import starUpgradeSprite from '@/assets/star_upgrade.webp';
+import starUpgrade2Sprite from '@/assets/star_upgrade2.webp';
+import healthWrenchSprite from '@/assets/health_wrench.webp';
+import unlimitedAmmoSprite from '@/assets/unlimited_ammo.webp';
 import { RendererImages } from '../game/Renderer';
 
 export const useImageLoader = () => {

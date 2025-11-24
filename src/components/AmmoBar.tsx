@@ -1,4 +1,4 @@
-import gunIcon from '@/assets/gun_icon.png';
+import gunIcon from '@/assets/gun_icon.webp';
 
 interface AmmoBarProps {
   ammo: number;

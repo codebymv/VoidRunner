@@ -1,7 +1,7 @@
 import { StatsManager, SessionStats } from '../game/StatsManager';
 import { AchievementSystem } from '../game/AchievementSystem';
 import { Button } from './ui/button';
-import trophyImage from '@/assets/trophy.png';
+import trophyImage from '@/assets/trophy.webp';
 
 interface StatsDisplayProps {
   sessionStats: SessionStats;
@@ -143,7 +143,7 @@ export const StatsDisplay = ({
 
 
 import { Button } from './ui/button';
-import trophyImage from '@/assets/trophy.png';
+import trophyImage from '@/assets/trophy.webp';
 
 interface StatsDisplayProps {
   sessionStats: SessionStats;

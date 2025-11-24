@@ -1,7 +1,7 @@
 import { Achievement } from './AchievementSystem';
 import { toast } from 'sonner';
 import React, { useRef, useCallback, useEffect } from 'react';
-import trophyImage from '@/assets/trophy.png';
+import trophyImage from '@/assets/trophy.webp';
 
 // Hook to show achievement notifications
 export const useAchievementNotifications = () => {
