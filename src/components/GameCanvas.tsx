@@ -42,6 +42,7 @@ import { createAmmoPowerUp, shouldSpawnAmmoPowerUp, renderAmmoPowerUp, UNLIMITED
 import { findNearestEnemy, calculateLeadShot } from "@/utils/autoTargeting";
 import { GameEngine } from "@/game/GameEngine";
 import { Renderer } from "@/game/Renderer";
+import { GAME_BALANCE } from "@/game/gameBalance";
 
 interface GameObject {
   x: number;
@@ -149,8 +150,8 @@ export const GameCanvas = () => {
   const sendStatsToParent = useCallback((score: number, nearMisses: number, repairs: number, shotsFired: number) => {
     // Calculate achievements unlocked (for display purposes - backend will also check)
     const achievements = [
-      { id: 'rookie', threshold: 1500, check: () => score >= 1500 },
-      { id: 'ace', threshold: 12500, check: () => score >= 12500 },
+      { id: 'rookie', threshold: GAME_BALANCE.upgrades.level2Score, check: () => score >= GAME_BALANCE.upgrades.level2Score },
+      { id: 'ace', threshold: GAME_BALANCE.upgrades.level3Score, check: () => score >= GAME_BALANCE.upgrades.level3Score },
       { id: 'legend', threshold: 25000, check: () => score >= 25000 },
       { id: 'psychonaut', threshold: 75000, check: () => score >= 75000 },
       { id: 'voidwizard', threshold: 300000, check: () => score >= 300000 },
@@ -213,7 +214,7 @@ export const GameCanvas = () => {
   // Uses the max of local and portal high scores so unlocks follow the database.
   useEffect(() => {
     const effectiveHighScore = Math.max(highScore, portalHighScore);
-    if (currentDifficulty === 'hard' && effectiveHighScore < 12500) {
+    if (currentDifficulty === 'hard' && effectiveHighScore < GAME_BALANCE.upgrades.hardUnlockScore) {
       const difficultyManager = difficultyManagerRef.current;
       difficultyManager.setDifficulty('medium', true);
       setCurrentDifficulty('medium');
@@ -244,7 +245,7 @@ export const GameCanvas = () => {
           highScore: portalValue || 0,
           achievementsUnlocked,
           achievementsTotal,
-          hardUnlocked: (portalValue || 0) >= 12500,
+          hardUnlocked: (portalValue || 0) >= GAME_BALANCE.upgrades.hardUnlockScore,
         };
         console.log('[VoidRunner] 📊 Received portal stats:', JSON.stringify(stats, null, 2));
       }
@@ -816,20 +817,20 @@ export const GameCanvas = () => {
             });
 
             // Award points
-            setScore(prev => prev + 150);
+            setScore(prev => prev + GAME_BALANCE.pickups.healthWrench.score);
 
             // Show pickup notification
             showPickupNotification(
-              "🔧 Repairs +150 pts",
+              `🔧 Repairs +${GAME_BALANCE.pickups.healthWrench.score} pts`,
               'bg-gradient-to-r from-green-400 to-emerald-500 text-slate-900 font-bold shadow-lg'
             );
 
             // Trigger health glow
-            healthGlowEndTimeRef.current = Date.now() + 1000;
+            healthGlowEndTimeRef.current = Date.now() + GAME_BALANCE.pickups.healthWrench.glowMs;
 
             // Health restoration with overflow to shield
             // Note: Particles are created by the engine, not here
-            const healAmount = 0.75; // 25% health
+            const healAmount = GAME_BALANCE.pickups.healthWrench.healAmount;
             setHealth(prevHealth => {
               if (prevHealth >= 3.0) {
                 // Health full, add to shield
@@ -857,18 +858,18 @@ export const GameCanvas = () => {
             setIsRecharging(false);
             playSound('unlimitedAmmo').catch(() => { });
 
-            setScore(prev => prev + 500);
+            setScore(prev => prev + GAME_BALANCE.pickups.ammoPowerUp.score);
             showPickupNotification(
-              "∞ Unlimited Ammo! +500 pts",
+              `∞ Unlimited Ammo! +${GAME_BALANCE.pickups.ammoPowerUp.score} pts`,
               'bg-gradient-to-r from-gray-300 to-slate-400 text-slate-900 font-bold shadow-lg'
             );
           },
           onVoidWipeCollected: (x: number, y: number) => {
             // Void Wipe power-up collection - clears all obstacles
             playSound('voidWipe').catch(() => { });
-            setScore(prev => prev + 1000);
+            setScore(prev => prev + GAME_BALANCE.pickups.voidWipe.score);
             showPickupNotification(
-              "💜 VOID WIPE! +1000 pts",
+              `💜 VOID WIPE! +${GAME_BALANCE.pickups.voidWipe.score} pts`,
               'bg-gradient-to-r from-purple-500 to-violet-600 text-white font-bold shadow-2xl'
             );
 
@@ -1182,8 +1183,9 @@ export const GameCanvas = () => {
       // === STEP 2: RUN GAME ENGINE (ALL LOGIC) ===
       if (engineRef.current) {
         // Update engine with current score/difficulty for spawning calculations
-        const currentDifficulty = 1 + score * 0.001;
-        engineRef.current.setScoreAndDifficulty(score, currentDifficulty);
+        const scoreDifficulty = 1 + score * 0.001;
+        const difficultyConfig = difficultyManagerRef.current.getCurrentConfig();
+        engineRef.current.setScoreAndDifficulty(score, scoreDifficulty, difficultyConfig);
 
         // Run ALL game logic in engine (physics, collisions, spawning, etc.)
         engineRef.current.update(delta);
@@ -1197,6 +1199,7 @@ export const GameCanvas = () => {
         game.bullets = engineState.bullets;
         game.healthWrenches = engineState.healthWrenches;
         game.ammoPowerUps = engineState.ammoPowerUps;
+        game.voidWipes = engineState.voidWipes;
         game.shipTrails = engineState.shipTrails;
         game.particles = engineState.particles;
         game.invulnerable = engineState.invulnerable;
@@ -1206,7 +1209,7 @@ export const GameCanvas = () => {
         game.lastComboTime = engineState.lastComboTime;
         game.lastPlanetSpawn = engineState.lastPlanetSpawn;
         game.lastStarSpawn = engineState.lastStarSpawn;
-        game.difficulty = currentDifficulty;
+        game.difficulty = scoreDifficulty;
       }
 
       // === STEP 3: RENDER (using updated state from engine) ===
@@ -1264,8 +1267,8 @@ export const GameCanvas = () => {
       // The engine automatically spawns entities based on difficulty and timing
 
       // Ship upgrade checks (must run every frame for hasWeapon to update correctly)
-      const isUpgradedToShip2 = score >= 1500;
-      const isUpgradedToShip3 = score >= 12500;
+      const isUpgradedToShip2 = score >= GAME_BALANCE.upgrades.level2Score;
+      const isUpgradedToShip3 = score >= GAME_BALANCE.upgrades.level3Score;
 
       // Use refs to prevent duplicate triggers due to async state updates (fixes audio race condition)
       if (isUpgradedToShip2 && !hasUpgradedRef.current) {

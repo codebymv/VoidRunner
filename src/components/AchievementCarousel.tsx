@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
 import trophyImage from '../assets/trophy.webp';
+import { GAME_BALANCE } from '@/game/gameBalance';
 
 export interface Achievement {
   id: string;
@@ -18,8 +19,8 @@ interface AchievementCarouselProps {
 
 // Define all achievements
 const ALL_ACHIEVEMENTS: Achievement[] = [
-  { id: 'rookie', name: 'Rookie', threshold: 1500, description: '1,500+ pts' },
-  { id: 'ace', name: 'Ace Pilot', threshold: 12500, description: '12,500+ pts' },
+  { id: 'rookie', name: 'Rookie', threshold: GAME_BALANCE.upgrades.level2Score, description: '1,500+ pts' },
+  { id: 'ace', name: 'Ace Pilot', threshold: GAME_BALANCE.upgrades.level3Score, description: '12,500+ pts' },
   { id: 'legend', name: 'Legend', threshold: 25000, description: '25,000+ pts' },
   { id: 'psychonaut', name: 'Psychonaut', threshold: 75000, description: '75,000+ pts' },
   { id: 'voidwizard', name: 'Void Wizard', threshold: 300000, description: '300,000+ pts' },

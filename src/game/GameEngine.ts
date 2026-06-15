@@ -10,12 +10,15 @@ import type {
   Particle,
   ShipTrail,
   Bullet,
-  AmmoPowerUp
+  AmmoPowerUp,
+  VoidWipe
 } from './types';
 import { ParticlePool, ANGLE_LUT } from '../utils/ParticlePool';
 import { createBullet, FIRE_RATE, AUTO_FIRE_RATE, AMMO_DRAIN_RATE, BULLET_SPEED } from '@/utils/shooting';
 import { findNearestEnemy, calculateLeadShot } from '@/utils/autoTargeting';
 import { SpatialGrid } from '../utils/SpatialGrid';
+import { DIFFICULTY_CONFIGS, type DifficultyConfig } from '../utils/difficultyConfig';
+import { GAME_BALANCE } from './gameBalance';
 
 /**
  * GameEngine - Headless game logic engine
@@ -88,6 +91,8 @@ export class GameEngine {
   private canvasWidth: number;
   private canvasHeight: number;
   private mobileScaleFactor: number;
+  private difficultyConfig: DifficultyConfig = DIFFICULTY_CONFIGS.medium;
+  private lastVoidWipeCollected: number = 0;
 
   constructor(
     canvasWidth: number,
@@ -125,12 +130,14 @@ export class GameEngine {
       shipTrails: [],
       bullets: [],
       ammoPowerUps: [],
+      voidWipes: [],
       keys: {},
       mouse: { x: 0, y: 0 },
       lastPlanetSpawn: 0,
       lastStarSpawn: 0,
       lastAmmoPowerUpSpawn: 0,
       lastHealthWrenchSpawn: 0,
+      lastVoidWipeSpawn: 0,
       gameStartTime: 0,
       difficulty: 1,
       invulnerable: 0,
@@ -751,7 +758,7 @@ export class GameEngine {
               this.callbacks.onCreateExplosion(explosionX, explosionY, megaBlastRadius, megaBlastForce, [i, j]);
               
               // Award collapse bonus
-              this.awardPoints("Black hole collapsed!", 500, 3000);
+              this.awardPoints("Black hole collapsed!", GAME_BALANCE.scoring.blackHoleCollapsed, 3000);
             } else {
               // Create enhanced black hole with progressive growth
               const blastRadius = 120 + Math.random() * 40;
@@ -828,15 +835,22 @@ export class GameEngine {
     this.state.particles = this.particlePool.getActive(); // Keep reference
     this.state.shipTrails = [];
     this.state.ammoPowerUps = [];
+    this.state.voidWipes = [];
     this.state.difficulty = 1;
     this.state.invulnerable = 180;
     this.state.nearMissTracker.clear();
     this.state.planetIdCounter = 0;
     this.state.gameStartTime = Date.now();
+    this.state.lastPlanetSpawn = 0;
+    this.state.lastStarSpawn = 0;
+    this.state.lastAmmoPowerUpSpawn = 0;
+    this.state.lastHealthWrenchSpawn = 0;
+    this.state.lastVoidWipeSpawn = 0;
     this.state.comboCount = 0;
     this.state.lastComboTime = 0;
     this.state.score = 0;
     this.state.shipLevel = 1;
+    this.lastVoidWipeCollected = 0;
   }
 
   /**
@@ -989,9 +1003,14 @@ export class GameEngine {
   /**
    * Set current score and difficulty for spawn calculations
    */
-  public setScoreAndDifficulty(score: number, difficulty: number): void {
+  public setScoreAndDifficulty(
+    score: number,
+    difficulty: number,
+    difficultyConfig: DifficultyConfig = this.difficultyConfig
+  ): void {
     this.currentScore = score;
     this.currentDifficulty = difficulty;
+    this.difficultyConfig = difficultyConfig;
   }
   
   private currentScore: number = 0;
@@ -1002,28 +1021,27 @@ export class GameEngine {
    */
   private updateSpawning(): void {
     const now = Date.now();
+    const config = this.difficultyConfig;
     
     // Check if in respite period after void wipe
-    const RESPITE_DURATION = 3000;
-    const lastVoidWipe = this.gameRef?.lastVoidWipeCollected || 0;
-    const inRespitePeriod = lastVoidWipe > 0 && (now - lastVoidWipe < RESPITE_DURATION);
+    const inRespitePeriod =
+      this.lastVoidWipeCollected > 0 &&
+      (now - this.lastVoidWipeCollected < GAME_BALANCE.pickups.voidWipe.respiteMs);
     
     // Planet spawning - difficulty-based rate
     if (!inRespitePeriod) {
-      const basePlanetInterval = 2000 / Math.max(1, this.currentDifficulty);
-      // Apply a multiplier based on difficulty (placeholder, can be customized)
-      const planetInterval = basePlanetInterval;
+      const basePlanetInterval = GAME_BALANCE.spawning.baseObstacleIntervalMs / Math.max(1, this.currentDifficulty);
+      const planetInterval = basePlanetInterval / config.obstacleSpawnMultiplier;
       
       if (now - this.state.lastPlanetSpawn > planetInterval) {
-        // Determine planet type based on score/difficulty
         const planetType = this.determinePlanetType();
         this.spawnPlanet(planetType);
         this.state.lastPlanetSpawn = now;
       }
     }
     
-    // Star spawning - every 3 seconds base rate
-    const starInterval = 3000;
+    // Star spawning - difficulty can increase reward density alongside risk
+    const starInterval = GAME_BALANCE.spawning.baseStarIntervalMs / config.starSpawnMultiplier;
     if (now - this.state.lastStarSpawn > starInterval) {
       this.spawnStar();
       this.state.lastStarSpawn = now;
@@ -1031,19 +1049,40 @@ export class GameEngine {
     
     // Health wrench spawning - rare, after 30 seconds
     const gameRunTime = now - this.state.gameStartTime;
-    if (gameRunTime > 30000 && now - this.state.lastHealthWrenchSpawn > 35000) {
-      if (Math.random() < 0.04) { // 4% chance per eligible frame
+    if (
+      gameRunTime > GAME_BALANCE.pickups.healthWrench.unlockMs &&
+      now - this.state.lastHealthWrenchSpawn > GAME_BALANCE.pickups.healthWrench.intervalMs
+    ) {
+      if (Math.random() < GAME_BALANCE.pickups.healthWrench.chancePerFrame) {
         this.spawnHealthWrench();
         this.state.lastHealthWrenchSpawn = now;
       }
     }
     
     // Ammo power-up spawning - rare, after 20 seconds, level 2+ only (when player has weapons)
-    const hasWeapon = this.currentScore >= 1500; // Level 2: weapons unlocked
-    if (hasWeapon && gameRunTime > 20000 && now - this.state.lastAmmoPowerUpSpawn > 25000) {
-      if (Math.random() < 0.05) { // 5% chance per eligible frame
+    const hasWeapon = this.currentScore >= GAME_BALANCE.upgrades.level2Score;
+    if (
+      hasWeapon &&
+      gameRunTime > GAME_BALANCE.pickups.ammoPowerUp.unlockMs &&
+      now - this.state.lastAmmoPowerUpSpawn > GAME_BALANCE.pickups.ammoPowerUp.intervalMs
+    ) {
+      if (Math.random() < GAME_BALANCE.pickups.ammoPowerUp.chancePerFrame) {
         this.spawnAmmoPowerUp();
         this.state.lastAmmoPowerUpSpawn = now;
+      }
+    }
+
+    // Void Wipe is a rare panic power-up for late, crowded runs.
+    if (
+      this.currentScore >= GAME_BALANCE.pickups.voidWipe.minScore &&
+      gameRunTime > GAME_BALANCE.pickups.voidWipe.unlockMs &&
+      this.state.planets.length >= GAME_BALANCE.pickups.voidWipe.minObstacleCount &&
+      this.state.voidWipes.length === 0 &&
+      now - this.state.lastVoidWipeSpawn > GAME_BALANCE.pickups.voidWipe.intervalMs
+    ) {
+      if (Math.random() < GAME_BALANCE.pickups.voidWipe.chancePerFrame) {
+        this.spawnVoidWipe();
+        this.state.lastVoidWipeSpawn = now;
       }
     }
   }
@@ -1051,27 +1090,31 @@ export class GameEngine {
   /**
    * Determine planet type based on current score/difficulty
    */
-  private determinePlanetType(): string {
+  private determinePlanetType(): "debris" | "meteor" | "planet2" | "blackhole" {
     const score = this.currentScore;
+    const dist = this.difficultyConfig.obstacleDistribution;
     
     // Early game (0-1000): mostly meteors
-    if (score < 1000) {
-      return Math.random() < 0.7 ? "meteor" : "debris";
+    if (score < GAME_BALANCE.spawning.earlyGameScore) {
+      const debrisChance = Math.max(GAME_BALANCE.spawning.earlyDebrisMinChance, dist.debris);
+      return Math.random() < debrisChance ? "debris" : "meteor";
     }
     
     // Mid game (1000-5000): introduce planets
-    if (score < 5000) {
+    if (score < GAME_BALANCE.spawning.midGameScore) {
       const rand = Math.random();
-      if (rand < 0.4) return "meteor";
-      if (rand < 0.7) return "debris";
+      const debrisChance = dist.debris;
+      const meteorChance = dist.meteor + GAME_BALANCE.spawning.midMeteorBonusChance;
+      if (rand < meteorChance) return "meteor";
+      if (rand < meteorChance + debrisChance) return "debris";
       return "planet2";
     }
     
-    // Late game (5000+): all types including blackholes
+    // Late game (5000+): all types using the selected difficulty mix
     const rand = Math.random();
-    if (rand < 0.25) return "meteor";
-    if (rand < 0.45) return "debris";
-    if (rand < 0.7) return "planet2";
+    if (rand < dist.debris) return "debris";
+    if (rand < dist.debris + dist.meteor) return "meteor";
+    if (rand < dist.debris + dist.meteor + dist.planet2) return "planet2";
     return "blackhole";
   }
 
@@ -1191,7 +1234,7 @@ export class GameEngine {
           
           // Show toast (score will be handled in Phase 12)
           // Award points for black hole collapse
-          this.awardPoints("Black hole collapsed!", 500, 3000);
+          this.awardPoints("Black hole collapsed!", GAME_BALANCE.scoring.blackHoleCollapsed, 3000);
           
           // Clean up nearMissTracker for removed planet
           this.state.nearMissTracker.delete(planet.id);
@@ -1658,7 +1701,7 @@ export class GameEngine {
               this.createParticles(explosionX, explosionY, "hsl(60, 100%, 80%)", 30);
               this.createExplosion(explosionX, explosionY, megaBlastRadius, megaBlastForce, [index1, index2]);
               
-              this.awardPoints("Black hole collapsed!", 500, 3000);
+              this.awardPoints("Black hole collapsed!", GAME_BALANCE.scoring.blackHoleCollapsed, 3000);
             } else {
               // Create enhanced black hole
               const blastRadius = 120 + Math.random() * 40;
@@ -1740,8 +1783,10 @@ export class GameEngine {
         }
         
         // Spawn scrap every 5-10 seconds, adjusted by difficulty
-        const baseScrapInterval = 5000 + Math.random() * 5000;
-        const scrapSpawnInterval = baseScrapInterval / (1 + this.state.difficulty * 0.2); // Difficulty multiplier
+        const baseScrapInterval =
+          GAME_BALANCE.pickups.debrisScrap.baseIntervalMs +
+          Math.random() * GAME_BALANCE.pickups.debrisScrap.randomIntervalMs;
+        const scrapSpawnInterval = baseScrapInterval / this.difficultyConfig.scrapSpawnMultiplier / (1 + this.state.difficulty * 0.2);
         
         if (now - planet.lastScrapSpawn > scrapSpawnInterval) {
           // Create a small scrap object
@@ -1786,15 +1831,9 @@ export class GameEngine {
           bulletHit = true;
           
           // Calculate damage (purple bullets do 50% more)
-          const baseDamage = {
-            meteor: 25,
-            planet2: 20,
-            blackhole: 15,
-            debris: 30
-          };
-          const damage = bullet.isPurple 
-            ? baseDamage[planet.type] * 1.5 
-            : baseDamage[planet.type];
+          const damage = bullet.isPurple
+            ? GAME_BALANCE.combat.bulletDamage[planet.type] * GAME_BALANCE.combat.purpleBulletDamageMultiplier
+            : GAME_BALANCE.combat.bulletDamage[planet.type];
           
           planet.health = (planet.health || planet.maxHealth || 100) - damage;
           
@@ -1818,9 +1857,7 @@ export class GameEngine {
             const planetIndex = this.state.planets.indexOf(planet);
             if (planetIndex > -1) {
               // Award points based on type
-              const points = planet.type === 'blackhole' ? 500 :
-                            planet.type === 'planet2' ? 200 :
-                            planet.type === 'meteor' ? 150 : 100;
+              const points = GAME_BALANCE.scoring.destroyedObstacle[planet.type];
               
               this.awardPoints(`Destroyed ${planet.type}!`, points, 1500);
               this.createParticles(planet.x, planet.y, planet.color, 30);
@@ -2038,8 +2075,7 @@ export class GameEngine {
     this.state.ammoPowerUps = this.state.ammoPowerUps.filter(p => !p.collected);
     
     // Void Wipe collection
-    const voidWipes = this.gameRef?.voidWipes || [];
-    voidWipes.forEach(voidWipe => {
+    this.state.voidWipes.forEach(voidWipe => {
       if (!voidWipe.collected) {
         const dx = voidWipe.x - this.state.ship.x;
         const dy = voidWipe.y - this.state.ship.y;
@@ -2066,9 +2102,7 @@ export class GameEngine {
           this.state.shake = 15;
           
           // Set respite period - prevent new obstacles from spawning for 3 seconds
-          if (this.gameRef) {
-            this.gameRef.lastVoidWipeCollected = Date.now();
-          }
+          this.lastVoidWipeCollected = Date.now();
           
           // Trigger void wipe callback (handles React state: score, notifications, sounds)
           this.callbacks.onVoidWipeCollected(voidWipe.x, voidWipe.y);
@@ -2077,9 +2111,7 @@ export class GameEngine {
     });
     
     // Remove collected void wipes
-    if (this.gameRef?.voidWipes) {
-      this.gameRef.voidWipes = this.gameRef.voidWipes.filter(v => !v.collected);
-    }
+    this.state.voidWipes = this.state.voidWipes.filter(v => !v.collected);
     
     // Scrap collection/damage
     // Note: Scrap damage handling will be done in Phase 8 (Ship-Planet Collisions)
@@ -2105,7 +2137,7 @@ export class GameEngine {
           this.lastStarAcquireSound = now;
         }
         
-        this.awardPoints("Scrap collected!", 25, 1500);
+        this.awardPoints("Scrap collected!", GAME_BALANCE.scoring.scrapCollected, 1500);
         return false; // Remove scrap
       } else if (distSq < damageRadiusSq && this.state.invulnerable === 0) {
         // Collision damage (only if not invulnerable)
@@ -2126,12 +2158,12 @@ export class GameEngine {
    * Calculate star value based on current score (ship level)
    */
   private getStarValue(currentScore: number): number {
-    if (currentScore >= 12500) {
-      return 1000; // Ship level 3
-    } else if (currentScore >= 1500) {
-      return 100; // Ship level 2
+    if (currentScore >= GAME_BALANCE.upgrades.level3Score) {
+      return GAME_BALANCE.scoring.starByShipLevel.level3;
+    } else if (currentScore >= GAME_BALANCE.upgrades.level2Score) {
+      return GAME_BALANCE.scoring.starByShipLevel.level2;
     } else {
-      return 10; // Ship level 1
+      return GAME_BALANCE.scoring.starByShipLevel.level1;
     }
   }
 
@@ -2180,10 +2212,10 @@ export class GameEngine {
    * Check if ship should upgrade based on score
    */
   private checkShipUpgrades(): void {
-    if (this.state.score >= 12500 && this.state.shipLevel < 3) {
+    if (this.state.score >= GAME_BALANCE.upgrades.level3Score && this.state.shipLevel < 3) {
       this.state.shipLevel = 3;
       this.callbacks.onShipUpgrade(3);
-    } else if (this.state.score >= 1500 && this.state.shipLevel < 2) {
+    } else if (this.state.score >= GAME_BALANCE.upgrades.level2Score && this.state.shipLevel < 2) {
       this.state.shipLevel = 2;
       this.callbacks.onShipUpgrade(2);
     }
@@ -2249,13 +2281,7 @@ export class GameEngine {
 
       // Initialize health based on type
       // Health values are based on obstacle type difficulty
-      const healthByType = {
-        meteor: 100,
-        planet2: 150,
-        blackhole: 300,
-        debris: 75
-      };
-      planet.health = healthByType[planet.type];
+      planet.health = GAME_BALANCE.combat.obstacleHealth[planet.type];
       planet.maxHealth = planet.health;
 
     this.state.planets.push(planet);
@@ -2334,9 +2360,17 @@ export class GameEngine {
       y = Math.random() * this.canvasHeight;
     } while ((x - this.state.ship.x) ** 2 + (y - this.state.ship.y) ** 2 < minDistSq);
 
-    // Note: voidWipes are stored in gameRef but managed similarly to other power-ups
-    // GameCanvas will need to handle the actual void wipe collection logic
-    // This method is a placeholder for future full migration
+    const voidWipe: VoidWipe = {
+      x,
+      y,
+      vx: 0,
+      vy: 0,
+      radius: GAME_BALANCE.pickups.voidWipe.radius * this.mobileScaleFactor,
+      collected: false,
+      pulsePhase: 0
+    };
+
+    this.state.voidWipes.push(voidWipe);
   }
 
   /**
@@ -2406,4 +2440,3 @@ export class GameEngine {
     });
   }
 }
-

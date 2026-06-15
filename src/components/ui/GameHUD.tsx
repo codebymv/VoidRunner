@@ -6,6 +6,7 @@ import redCrossSprite from "../../assets/red_cross.webp";
 import shieldSprite from "../../assets/shield.svg";
 import unlimitedAmmoImage from '../../assets/unlimited_ammo.webp';
 import { AudioManager } from "../../audio/AudioManager";
+import { Pause } from "lucide-react";
 
 interface GameHUDProps {
   score: number;
@@ -54,13 +55,19 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   onDifficultyChange,
   playMenuOpen,
 }) => {
+  const handlePauseClick = () => {
+    playMenuOpen().catch(console.error);
+    AudioManager.getInstance().stopShipEngineLoops();
+    onPause();
+  };
+
   return (
     <>
       {/* UI Header - Responsive Layout */}
-      <div className="w-full mb-0">
+      <div className="absolute top-0 left-0 right-0 z-50 p-1 sm:p-2 pointer-events-none">
         {isMobile ? (
           /* Mobile Layout - Stacked */
-          <div className="space-y-0.5">
+          <div className="space-y-1 rounded-lg border border-primary/25 bg-black/65 p-1.5 shadow-lg backdrop-blur-md pointer-events-auto">
             {/* Top Row - Logo, Help, and Score */}
             <div className="flex items-center justify-between px-0.5 sm:px-1">
               <img 
@@ -102,7 +109,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 <div className="relative">
                   <button
                     onClick={onToggleHelp}
-                    className="help-button w-8 h-8 rounded-full bg-primary/20 border border-primary/30 text-primary hover:bg-primary/30 transition-colors flex items-center justify-center text-lg font-bold z-[70]"
+                    className="help-button w-8 h-8 rounded-full bg-black/70 border border-primary/50 text-primary hover:bg-primary/25 transition-colors flex items-center justify-center text-lg font-bold z-[70] shadow-md"
                   >
                     ?
                   </button>
@@ -231,7 +238,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </div>
         ) : (
           /* Desktop Layout - Single Row */
-          <div className="flex items-center justify-between px-6">
+          <div className="flex items-center justify-between rounded-lg border border-primary/25 bg-black/60 px-4 py-2 shadow-lg backdrop-blur-md pointer-events-auto">
             {/* Left side - Logo and Score */}
             <div className="flex items-center gap-10">
               <img 
@@ -354,6 +361,16 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               </div>
               
               {/* Hamburger Menu */}
+              <Button
+                onClick={handlePauseClick}
+                aria-label="Pause"
+                variant="outline"
+                size="sm"
+                className="bg-black/70 border-primary/50 text-primary hover:bg-primary/20"
+              >
+                <Pause className="h-4 w-4" aria-hidden="true" />
+              </Button>
+
               <HamburgerMenu 
                 showJoystick={showJoystick}
                 onToggleJoystick={onToggleJoystick}

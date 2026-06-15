@@ -1,4 +1,5 @@
 import { DifficultyLevel } from "@/utils/difficultyConfig";
+import { GAME_BALANCE } from "@/game/gameBalance";
 
 interface DifficultySelectorProps {
   currentDifficulty: DifficultyLevel;
@@ -16,7 +17,7 @@ export const DifficultySelector = ({
       <div className="text-sm text-muted-foreground">Difficulty</div>
       <div className="flex gap-1">
         {(['easy', 'medium', 'hard'] as const).map((difficulty) => {
-          const isHardLocked = difficulty === 'hard' && highScore < 12500;
+          const isHardLocked = difficulty === 'hard' && highScore < GAME_BALANCE.upgrades.hardUnlockScore;
           return (
             <button
               key={difficulty}
@@ -48,7 +49,6 @@ export const DifficultySelector = ({
     </div>
   );
 };
-
 
 
 

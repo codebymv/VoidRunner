@@ -103,6 +103,9 @@ export class AudioManager {
   // Sound variation system (prevents late-game audio spam)
   private soundInstanceTracker: SoundInstanceTracker = new SoundInstanceTracker();
   private screenWidth: number = 1920; // Default screen width for spatial panning (updated by setScreenDimensions)
+  private playbackBlockWarnings: Set<string> = new Set();
+  private hasPlaybackUnlocked: boolean = false;
+  private hasLoggedLockedPlaybackSkip: boolean = false;
   
   private constructor() {
     // Don't initialize audio immediately - wait for user gesture
@@ -336,6 +339,25 @@ export class AudioManager {
   public setScreenDimensions(width: number): void {
     this.screenWidth = width;
   }
+
+  private isAutoplayBlocked(error: unknown): boolean {
+    return error instanceof DOMException
+      ? error.name === 'NotAllowedError'
+      : String(error).includes('NotAllowedError');
+  }
+
+  private handlePlaybackError(soundName: string, error: unknown, context: string = 'sound'): void {
+    if (this.isAutoplayBlocked(error)) {
+      const warningKey = `${context}:${soundName}`;
+      if (!this.playbackBlockWarnings.has(warningKey)) {
+        console.info(`[Audio] Browser blocked ${context} '${soundName}' until playback is unlocked by a user gesture.`);
+        this.playbackBlockWarnings.add(warningKey);
+      }
+      return;
+    }
+
+    console.error(`[Audio] Failed to play ${context} '${soundName}':`, error);
+  }
   
   /**
    * Plays a sound effect with optional position for spatial panning
@@ -362,6 +384,14 @@ export class AudioManager {
       return;
     }
     
+    if (!this.hasPlaybackUnlocked) {
+      if (!this.hasLoggedLockedPlaybackSkip) {
+        console.info('[Audio] Sound effects will start after the first successful browser playback unlock.');
+        this.hasLoggedLockedPlaybackSkip = true;
+      }
+      return;
+    }
+
     // === SOUND VARIATION SYSTEM (Late-Game Audio Spam Prevention) ===
     const variationConfig = getSoundVariationConfig(soundName);
     
@@ -391,7 +421,7 @@ export class AudioManager {
         // Reset audio to beginning and play
         audio.currentTime = 0;
         audio.play().catch(error => {
-          console.error(`Failed to play shield sound:`, error);
+          this.handlePlaybackError('shieldActivate', error, 'shield sound');
         });
       } catch (error) {
         console.error(`Error playing shield sound:`, error);
@@ -429,7 +459,7 @@ export class AudioManager {
         // Play the sound
         audio.currentTime = 0;
         audio.play().catch(error => {
-          console.error(`Failed to play ${soundName} sound:`, error);
+          this.handlePlaybackError(soundName, error, 'pooled shot sound');
         });
       } catch (error) {
         console.error(`Error playing ${soundName} sound:`, error);
@@ -677,10 +707,11 @@ try {
       }
       
       await currentTrack.play();
+      this.hasPlaybackUnlocked = true;
       this.isThemePlaying = true;
       console.log(`🎵 Playlist started with track ${this.currentTrackIndex}`);
     } catch (error) {
-      console.error('Failed to start playlist:', error);
+      this.handlePlaybackError('playlist', error, 'theme music');
     }
   }
   
@@ -904,8 +935,8 @@ private setSpeechVolume(): void { // <-- REMOVE (volume: number)
       this.shipIdleLoop.currentTime = 0;
       this.shipThrustLoop.currentTime = 0;
       
-      this.shipIdleLoop.play().catch(err => console.error('Failed to play idle loop:', err));
-      this.shipThrustLoop.play().catch(err => console.error('Failed to play thrust loop:', err));
+      this.shipIdleLoop.play().catch(err => this.handlePlaybackError('shipIdleLoop', err, 'engine loop'));
+      this.shipThrustLoop.play().catch(err => this.handlePlaybackError('shipThrustLoop', err, 'engine loop'));
       
       console.log('🚀 Ship engine loops started');
     }
